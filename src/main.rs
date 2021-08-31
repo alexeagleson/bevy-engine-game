@@ -1,22 +1,34 @@
-use std::time::Duration;
+use std::{
+    convert::TryInto,
+    io::{stdout, Write},
+    time::Duration,
+};
 
 use bevy::{
     app::{ScheduleRunnerPlugin, ScheduleRunnerSettings},
     ecs::schedule::ReportExecutionOrderAmbiguities,
     log::LogPlugin,
     prelude::{
-        debug, error, info, trace, warn, App, Bundle, Commands, Entity, IntoSystem, Query, Res,
-        With, Without,
+        debug, error, info, trace, warn, App, Bundle, Commands, Entity, IntoSystem,
+        ParallelSystemDescriptorCoercion, Query, Res, With, Without,
     },
 };
 
 mod map;
+use crossterm::{
+    cursor,
+    style::{self, Stylize},
+    QueueableCommand, Result,
+};
 pub use map::*;
 
 mod rect;
+use rand::Rng;
 pub use rect::Rect;
 
 struct Name(String);
+
+struct Human;
 
 struct Goblin;
 
@@ -24,6 +36,11 @@ struct Hp(i32);
 
 trait Death {
     fn is_dead(&self) -> bool;
+}
+
+struct Position {
+    x: i32,
+    y: i32,
 }
 
 struct Damage(i32);
@@ -46,17 +63,26 @@ struct CreatureBundle {
 // parallel. Our World contains all of our components, so mutating arbitrary parts of it in parallel
 // is not thread safe. Command buffers give us the ability to queue up changes to our World without
 // directly accessing it
-fn spawn_humans(mut commands: Commands) {
-    for _ in 1..=1000 {
-        commands.spawn_bundle(CreatureBundle {
-            name: Name(String::from("Human")),
-            damage: Damage(5),
-            hp: Hp(20),
-        });
+fn spawn_humans(mut commands: Commands, rooms: Res<Vec<Rect>>) {
+    if let Some(room) = rooms.first() {
+        for _ in 1..=10 {
+            let room_centre = room.center();
+            commands
+                .spawn_bundle(CreatureBundle {
+                    name: Name(String::from("Human")),
+                    damage: Damage(5),
+                    hp: Hp(20),
+                })
+                .insert(Human)
+                .insert(Position {
+                    x: room_centre.0,
+                    y: room_centre.1,
+                });
 
-        // spawn().insert(Creature {
-        //     name: String::from("ASSMAN"),
-        // });
+            // spawn().insert(Creature {
+            //     name: String::from("ASSMAN"),
+            // });
+        }
     }
 }
 
@@ -66,7 +92,7 @@ fn spawn_goblins(mut commands: Commands) {
         commands
             .spawn_bundle(CreatureBundle {
                 name: Name(String::from("Goblin")),
-                damage: Damage(4),
+                damage: Damage(10),
                 hp: Hp(15),
             })
             .insert(Goblin);
@@ -75,53 +101,116 @@ fn spawn_goblins(mut commands: Commands) {
 
 fn humans_fight_goblins(
     mut commands: Commands,
-    mut human_query: Query<(Entity, &Damage, &mut Hp), Without<Goblin>>,
-    mut goblin_query: Query<(Entity, &Damage, &mut Hp), With<Goblin>>,
+    human_query: Query<(&Damage, &Human)>,
+    mut goblin_query: Query<(Entity, &mut Hp, &Goblin)>,
 ) {
     // let mut humans = human_query.iter().count();
     let mut goblin_iter = goblin_query.iter_mut();
 
-    for (human_entity, human_damage, mut human_hp) in human_query.iter_mut() {
-        if let Some((goblin_entity, goblin_damage, mut goblin_hp)) = goblin_iter.next() {
+    for (human_damage, _) in human_query.iter() {
+        if let Some((goblin_entity, mut goblin_hp, _)) = goblin_iter.next() {
             // Humans attack goblins
             goblin_hp.0 = goblin_hp.0 - human_damage.0;
 
             match goblin_hp.is_dead() {
                 true => commands.entity(goblin_entity).despawn(),
-                false => {
-                    human_hp.0 = human_hp.0 - goblin_damage.0;
-                    match human_hp.is_dead() {
-                        true => commands.entity(human_entity).despawn(),
-                        false => (),
-                    }
-                }
+                false => (),
             }
         }
     }
 }
 
+fn make_scroll_name() -> String {
+    let mut rng = rand::thread_rng();
+
+    let length = 4 + rng.gen_range(1..4);
+    let mut name = "Scroll of ".to_string();
+
+    for i in 0..length {
+        if i % 2 == 0 {
+            name += match rng.gen_range(1..5) {
+                1 => "a",
+                2 => "e",
+                3 => "i",
+                4 => "o",
+                _ => "u",
+            }
+        } else {
+            name += match rng.gen_range(1..21) {
+                1 => "b",
+                2 => "c",
+                3 => "d",
+                4 => "f",
+                5 => "g",
+                6 => "h",
+                7 => "j",
+                8 => "k",
+                9 => "l",
+                10 => "m",
+                11 => "n",
+                12 => "p",
+                13 => "q",
+                14 => "r",
+                15 => "s",
+                16 => "t",
+                17 => "v",
+                18 => "w",
+                19 => "x",
+                20 => "y",
+                _ => "z",
+            }
+        }
+    }
+
+    name
+}
+
 // This system updates the score for each entity with the "Player" and "Score" component.
-fn count_goblins(goblin_query: Query<&Goblin>, map: Res<Vec<TileType>>) {
+fn count_goblins(human_query: Query<&Human>, goblin_query: Query<&Goblin>) {
     let num_goblins = goblin_query.iter().len();
-    // print!("{}[2J", 27 as char);
+    let num_humans = human_query.iter().len();
+
+    info!("Goblins remaining: {} ", num_goblins);
+    info!("Humans remaining: {} ", num_humans);
+    // info!("Scroll name: {} ", make_scroll_name());
+}
+
+// This system updates the score for each entity with the "Player" and "Score" component.
+fn render_map(map: Res<Vec<TileType>>) {
     print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
     draw_map(&map);
-    info!("Goblins remaining: {} ", num_goblins);
+}
+
+// This system updates the score for each entity with the "Player" and "Score" component.
+fn draw_creatures(position_query: Query<&Position>) {
+    let mut stdout = stdout();
+
+    for position in position_query.iter() {
+        stdout
+            .queue(cursor::MoveTo(
+                position.x.try_into().unwrap(),
+                position.y.try_into().unwrap(),
+            ))
+            .unwrap()
+            .queue(style::PrintStyledContent("█".blue()));
+    }
+
+    stdout.flush();
 }
 
 // Our Bevy app's entry point
 fn main() {
     let (rooms, map) = new_map_rooms_and_corridors();
 
-
     // Bevy apps are created using the builder pattern. We use the builder to add systems,
     // resources, and plugins to our app
     App::build()
         .insert_resource(map)
+        .insert_resource(rooms)
         // Resources can be added to our app like this
         // .insert_resource(State { counter: 0 })
         // Some systems are configured by adding their settings as a resource
-        .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_secs(1)))
+        .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_secs(2)))
         // Plugins are just a grouped set of app builder calls (just like we're doing here).
         // We could easily turn our game into a plugin, but you can check out the plugin example for
         // that :) The plugin below runs our app's "system schedule" once every 5 seconds
@@ -203,7 +292,10 @@ fn main() {
         .add_startup_system(spawn_humans.system())
         .add_startup_system(spawn_goblins.system())
         .add_system(humans_fight_goblins.system())
-        .add_system(count_goblins.system())
-        // .add_system(log_system.system())
+        .add_system(render_map.system().label("render_map"))
+        .add_system(
+            count_goblins.system().label("count_goblins"), // .after("render_map"),
+        )
+        // .add_system(draw_creatures.system().after("count_goblins"))
         .run();
 }
