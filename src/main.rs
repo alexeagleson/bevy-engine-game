@@ -9,7 +9,7 @@ use bevy::{
     ecs::schedule::ReportExecutionOrderAmbiguities,
     log::LogPlugin,
     prelude::{
-        debug, error, info, trace, warn, App, Bundle, Commands, Entity, IntoSystem,
+        debug, error, info, trace, warn, App, Bundle, Commands, Entity, IntoSystem, Labels,
         ParallelSystemDescriptorCoercion, Query, Res, With, Without,
     },
 };
@@ -25,6 +25,8 @@ pub use map::*;
 mod rect;
 use rand::{prelude::SliceRandom, Rng};
 pub use rect::Rect;
+
+use pathfinding::prelude::{absdiff, astar};
 
 struct Name(String);
 
@@ -42,10 +44,12 @@ trait Death {
 
 struct Colour(Color);
 
-struct Position {
-    x: i32,
-    y: i32,
-}
+struct Path(Vec<(i32, i32)>, usize);
+
+struct ReadyForPath(bool);
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+struct Position(i32, i32);
 
 struct Damage(i32);
 
@@ -69,7 +73,7 @@ struct CreatureBundle {
 // is not thread safe. Command buffers give us the ability to queue up changes to our World without
 // directly accessing it
 fn spawn_humans(mut commands: Commands) {
-    for _ in 1..=5 {
+    for _ in 1..=100 {
         commands
             .spawn_bundle(CreatureBundle {
                 name: Name(String::from("Human")),
@@ -78,7 +82,8 @@ fn spawn_humans(mut commands: Commands) {
                 render: Render,
             })
             .insert(Human)
-            .insert(Colour(Color::Green));
+            .insert(Colour(Color::Green))
+            .insert(ReadyForPath(true));
     }
 }
 
@@ -93,7 +98,8 @@ fn spawn_goblins(mut commands: Commands) {
                 render: Render,
             })
             .insert(Goblin)
-            .insert(Colour(Color::Red));
+            .insert(Colour(Color::Red))
+            .insert(ReadyForPath(true));
     }
 }
 
@@ -185,10 +191,9 @@ fn place_creatures(
         if let Some(room) = room_option {
             let room_centre = room.center();
 
-            commands.entity(entity).insert(Position {
-                x: room_centre.0,
-                y: room_centre.1,
-            });
+            commands
+                .entity(entity)
+                .insert(Position(room_centre.0, room_centre.1));
         }
     }
 }
@@ -211,6 +216,98 @@ fn render_map(map: Res<Vec<TileType>>) {
 //     ResetColor
 // )
 
+fn move_path(
+    mut commands: Commands,
+    mut creature_query: Query<(Entity, &mut Position, &mut Path, &mut ReadyForPath)>,
+    rooms: Res<Vec<Rect>>,
+    map: Res<map::Map>,
+) {
+    for (entity, mut position, mut path, mut readyForPath) in creature_query.iter_mut() {
+        let idx = path.1;
+        if path.0.len() > idx {
+            let (next_x, next_y) = path.0[idx];
+            position.0 = next_x;
+            position.1 = next_y;
+            path.1 += 1; // Move to next path index
+        } else {
+            readyForPath.0 = true;
+        }
+    }
+}
+
+fn create_paths(
+    mut commands: Commands,
+    mut creature_query: Query<(Entity, &Position, &mut ReadyForPath)>,
+    rooms: Res<Vec<Rect>>,
+    map: Res<map::Map>,
+) {
+
+
+    let mut stdout = stdout();
+    let mut rng = rand::thread_rng();
+
+    for (entity, position, mut readyForPath) in creature_query.iter_mut() {
+
+        if readyForPath.0 == false {
+            continue;
+        }
+
+        let room_option = rooms.choose(&mut rng).unwrap();
+
+        let GOAL: (i32, i32) = room_option.center();
+
+        let new_x = position.0 + rng.gen_range(-1..=1);
+        let new_y = position.1 + rng.gen_range(-1..=1);
+
+        match is_blocked(new_x, new_y, &map) {
+            false => {
+                // position.0 = new_x;
+                // position.1 = new_y;
+            }
+            true => (),
+        }
+
+        let mut fff: Vec<Position> = Vec::with_capacity(4);
+
+        let result = astar(
+            &(position.0, position.1),
+            |&(x, y)| {
+                vec![(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+                    .into_iter()
+                    .filter(|&(x, y)| map::is_blocked(x, y, &map) == false)
+                    .map(|p| (p, 1))
+            },
+            |&(x, y)| absdiff(x, GOAL.0) + absdiff(y, GOAL.1),
+            |&p| p == GOAL,
+        );
+        // assert_eq!(result.expect("no path found").1, 4);
+
+        if let Some(fff) = result {
+            let (ttt, yyy) = fff;
+
+            commands.entity(entity).insert(Path(ttt, 0));
+
+            readyForPath.0 = false;
+
+            // for i in ttt.iter() {
+            //     stdout
+            //         .queue(cursor::MoveTo(
+            //             i.0.try_into().unwrap(),
+            //             i.1.try_into().unwrap(),
+            //         ))
+            //         .unwrap()
+            //         // .queue(style::PrintStyledContent("█".blue()));
+            //         .queue(style::SetForegroundColor(Color::DarkYellow))
+            //         .unwrap()
+            //         .queue(style::Print("P".to_string()))
+            //         .unwrap();
+            // }
+        }
+
+        stdout.queue(style::ResetColor).unwrap().flush();
+    }
+}
+
 // This system updates the score for each entity with the "Player" and "Score" component.
 fn draw_creatures(position_query: Query<(&Position, &Colour)>) {
     let mut stdout = stdout();
@@ -232,8 +329,8 @@ fn draw_creatures(position_query: Query<(&Position, &Colour)>) {
 
         stdout
             .queue(cursor::MoveTo(
-                position.x.try_into().unwrap(),
-                position.y.try_into().unwrap(),
+                position.0.try_into().unwrap(),
+                position.1.try_into().unwrap(),
             ))
             .unwrap()
             // .queue(style::PrintStyledContent("█".blue()));
@@ -258,7 +355,7 @@ fn main() {
         // Resources can be added to our app like this
         // .insert_resource(State { counter: 0 })
         // Some systems are configured by adding their settings as a resource
-        .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_secs(2)))
+        .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_millis(200)))
         // Plugins are just a grouped set of app builder calls (just like we're doing here).
         // We could easily turn our game into a plugin, but you can check out the plugin example for
         // that :) The plugin below runs our app's "system schedule" once every 5 seconds
@@ -348,6 +445,13 @@ fn main() {
                 .label("count_goblins")
                 .after("render_map"),
         )
-        .add_system(draw_creatures.system().after("count_goblins"))
+        .add_system(
+            draw_creatures
+                .system()
+                .label("draw_creatures")
+                .after("count_goblins"),
+        )
+        .add_system(create_paths.system())
+        .add_system(move_path.system())
         .run();
 }

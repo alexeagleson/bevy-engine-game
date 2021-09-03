@@ -20,6 +20,8 @@ pub fn xy_idx(x: i32, y: i32) -> usize {
     (y as usize * WIDTH) + x as usize
 }
 
+pub type Map = Vec<TileType>;
+
 pub fn new_map_test() -> Vec<TileType> {
     let mut map = vec![TileType::Floor; WIDTH * HEIGHT];
 
@@ -64,7 +66,7 @@ fn apply_vertical_tunnel(map: &mut [TileType], y1: i32, y2: i32, x: i32) {
 
 /// Makes a new map using the algorithm from http://rogueliketutorials.com/tutorials/tcod/part-3/
 /// This gives a handful of random rooms and corridors joining them together.
-pub fn new_map_rooms_and_corridors() -> (Vec<Rect>, Vec<TileType>) {
+pub fn new_map_rooms_and_corridors() -> (Vec<Rect>, Map) {
     let mut map = vec![TileType::Wall; WIDTH * HEIGHT];
 
     let mut rooms: Vec<Rect> = Vec::new();
@@ -132,3 +134,10 @@ pub fn draw_map(map: &[TileType]) {
         }
     }
 } 
+
+pub fn is_blocked(x: i32, y: i32, map: &Map) -> bool {
+    match map[xy_idx(x, y)] {
+        TileType::Floor => false,
+        TileType::Wall => true
+    }
+}
