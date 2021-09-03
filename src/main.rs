@@ -16,17 +16,19 @@ use bevy::{
 
 mod map;
 use crossterm::{
-    cursor,
-    style::{self, Stylize},
+    cursor, execute,
+    style::{self, Color, Stylize},
     QueueableCommand, Result,
 };
 pub use map::*;
 
 mod rect;
-use rand::Rng;
+use rand::{prelude::SliceRandom, Rng};
 pub use rect::Rect;
 
 struct Name(String);
+
+struct Render;
 
 struct Human;
 
@@ -37,6 +39,8 @@ struct Hp(i32);
 trait Death {
     fn is_dead(&self) -> bool;
 }
+
+struct Colour(Color);
 
 struct Position {
     x: i32,
@@ -56,6 +60,7 @@ struct CreatureBundle {
     name: Name,
     hp: Hp,
     damage: Damage,
+    render: Render,
 }
 
 // This system uses a command buffer to (potentially) add a new player to our game on each
@@ -63,39 +68,32 @@ struct CreatureBundle {
 // parallel. Our World contains all of our components, so mutating arbitrary parts of it in parallel
 // is not thread safe. Command buffers give us the ability to queue up changes to our World without
 // directly accessing it
-fn spawn_humans(mut commands: Commands, rooms: Res<Vec<Rect>>) {
-    if let Some(room) = rooms.first() {
-        for _ in 1..=10 {
-            let room_centre = room.center();
-            commands
-                .spawn_bundle(CreatureBundle {
-                    name: Name(String::from("Human")),
-                    damage: Damage(5),
-                    hp: Hp(20),
-                })
-                .insert(Human)
-                .insert(Position {
-                    x: room_centre.0,
-                    y: room_centre.1,
-                });
-
-            // spawn().insert(Creature {
-            //     name: String::from("ASSMAN"),
-            // });
-        }
+fn spawn_humans(mut commands: Commands) {
+    for _ in 1..=5 {
+        commands
+            .spawn_bundle(CreatureBundle {
+                name: Name(String::from("Human")),
+                damage: Damage(0),
+                hp: Hp(20),
+                render: Render,
+            })
+            .insert(Human)
+            .insert(Colour(Color::Green));
     }
 }
 
 fn spawn_goblins(mut commands: Commands) {
-    for _ in 1..=100_000 {
+    for _ in 1..=5 {
         // commands.spawn().insert(Bug { legs: 4 });
         commands
             .spawn_bundle(CreatureBundle {
                 name: Name(String::from("Goblin")),
-                damage: Damage(10),
+                damage: Damage(0),
                 hp: Hp(15),
+                render: Render,
             })
-            .insert(Goblin);
+            .insert(Goblin)
+            .insert(Colour(Color::Red));
     }
 }
 
@@ -175,27 +173,77 @@ fn count_goblins(human_query: Query<&Human>, goblin_query: Query<&Goblin>) {
     // info!("Scroll name: {} ", make_scroll_name());
 }
 
+fn place_creatures(
+    mut commands: Commands,
+    creature_query: Query<Entity, Without<Position>>,
+    rooms: Res<Vec<Rect>>,
+) {
+    let mut rng = rand::thread_rng();
+
+    for entity in creature_query.iter() {
+        let room_option = rooms.choose(&mut rng);
+        if let Some(room) = room_option {
+            let room_centre = room.center();
+
+            commands.entity(entity).insert(Position {
+                x: room_centre.0,
+                y: room_centre.1,
+            });
+        }
+    }
+}
+
 // This system updates the score for each entity with the "Player" and "Score" component.
 fn render_map(map: Res<Vec<TileType>>) {
     print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
     draw_map(&map);
 }
 
+// execute!(
+//     stdout(),
+//     // Blue foreground
+//     SetForegroundColor(Color::Blue),
+//     // Red background
+//     SetBackgroundColor(Color::Red),
+//     // Print text
+//     Print("Blue text on Red.".to_string()),
+//     // Reset to default colors
+//     ResetColor
+// )
+
 // This system updates the score for each entity with the "Player" and "Score" component.
-fn draw_creatures(position_query: Query<&Position>) {
+fn draw_creatures(position_query: Query<(&Position, &Colour)>) {
     let mut stdout = stdout();
 
-    for position in position_query.iter() {
+    println!("HEYYYY!!!");
+
+    for (position, colour) in position_query.iter() {
+        // execute!(
+        //     stdout(),
+        //     // Blue foreground
+        //     SetForegroundColor(Color::Blue),
+        //     // Red background
+        //     SetBackgroundColor(Color::Red),
+        //     // Print text
+        //     Print("Blue text on Red.".to_string()),
+        //     // Reset to default colors
+        //     ResetColor
+        // );
+
         stdout
             .queue(cursor::MoveTo(
                 position.x.try_into().unwrap(),
                 position.y.try_into().unwrap(),
             ))
             .unwrap()
-            .queue(style::PrintStyledContent("█".blue()));
+            // .queue(style::PrintStyledContent("█".blue()));
+            .queue(style::SetForegroundColor(colour.0))
+            .unwrap()
+            .queue(style::Print("@".to_string()))
+            .unwrap();
     }
 
-    stdout.flush();
+    stdout.queue(style::ResetColor).unwrap().flush();
 }
 
 // Our Bevy app's entry point
@@ -289,13 +337,17 @@ fn main() {
         .add_plugin(LogPlugin::default())
         .insert_resource(ReportExecutionOrderAmbiguities)
         // This call to run() starts the app we just built!
-        .add_startup_system(spawn_humans.system())
-        .add_startup_system(spawn_goblins.system())
+        .add_startup_system(spawn_humans.system().label("spawn"))
+        .add_startup_system(spawn_goblins.system().label("spawn"))
+        .add_system(place_creatures.system())
         .add_system(humans_fight_goblins.system())
         .add_system(render_map.system().label("render_map"))
         .add_system(
-            count_goblins.system().label("count_goblins"), // .after("render_map"),
+            count_goblins
+                .system()
+                .label("count_goblins")
+                .after("render_map"),
         )
-        // .add_system(draw_creatures.system().after("count_goblins"))
+        .add_system(draw_creatures.system().after("count_goblins"))
         .run();
 }
