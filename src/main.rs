@@ -9,8 +9,8 @@ use bevy::{
     ecs::schedule::ReportExecutionOrderAmbiguities,
     log::LogPlugin,
     prelude::{
-        debug, error, info, trace, warn, App, Bundle, Commands, Entity, IntoSystem, Labels,
-        ParallelSystemDescriptorCoercion, Query, Res, With, Without,
+        debug, error, info, trace, warn, App, Bundle, Changed, Commands, Entity, IntoSystem,
+        Labels, ParallelSystemDescriptorCoercion, Query, Res, ResMut, With, Without,
     },
 };
 
@@ -23,14 +23,20 @@ use crossterm::{
 pub use map::*;
 
 mod rect;
-use rand::{prelude::SliceRandom, Rng};
+use rand::{
+    prelude::{IteratorRandom, SliceRandom},
+    Rng,
+};
 pub use rect::Rect;
 
 use pathfinding::prelude::{absdiff, astar};
 
 struct Name(String);
 
-struct Render;
+struct Render {
+    colour: Color,
+    char: String,
+}
 
 struct Human;
 
@@ -42,14 +48,14 @@ trait Death {
     fn is_dead(&self) -> bool;
 }
 
-struct Colour(Color);
-
 struct Path(Vec<(i32, i32)>, usize);
 
-struct ReadyForPath(bool);
+// struct ReadyForPath(bool);
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 struct Position(i32, i32);
+
+struct Target(Option<(Position, Entity)>);
 
 struct Damage(i32);
 
@@ -59,12 +65,17 @@ impl Death for Hp {
     }
 }
 
+struct Food;
+
+struct Hunger(i32);
+
 #[derive(Bundle)]
 struct CreatureBundle {
     name: Name,
     hp: Hp,
     damage: Damage,
     render: Render,
+    hunger: Hunger,
 }
 
 // This system uses a command buffer to (potentially) add a new player to our game on each
@@ -73,17 +84,21 @@ struct CreatureBundle {
 // is not thread safe. Command buffers give us the ability to queue up changes to our World without
 // directly accessing it
 fn spawn_humans(mut commands: Commands) {
-    for _ in 1..=100 {
+    for _ in 1..=10 {
         commands
             .spawn_bundle(CreatureBundle {
                 name: Name(String::from("Human")),
                 damage: Damage(0),
                 hp: Hp(20),
-                render: Render,
+                render: Render {
+                    colour: Color::Green,
+                    char: "@".to_string(),
+                },
+                hunger: Hunger(0),
             })
             .insert(Human)
-            .insert(Colour(Color::Green))
-            .insert(ReadyForPath(true));
+            .insert(Target(None));
+        // .insert(ReadyForPath(true));
     }
 }
 
@@ -95,11 +110,26 @@ fn spawn_goblins(mut commands: Commands) {
                 name: Name(String::from("Goblin")),
                 damage: Damage(0),
                 hp: Hp(15),
-                render: Render,
+                render: Render {
+                    colour: Color::Red,
+                    char: "G".to_string(),
+                },
+                hunger: Hunger(100),
             })
-            .insert(Goblin)
-            .insert(Colour(Color::Red))
-            .insert(ReadyForPath(true));
+            .insert(Goblin);
+        // .insert(ReadyForPath(true));
+    }
+}
+
+fn spawn_food(mut commands: Commands) {
+    for _ in 1..=10 {
+        commands
+            .spawn()
+            .insert(Render {
+                colour: Color::Yellow,
+                char: "F".to_string(),
+            })
+            .insert(Food);
     }
 }
 
@@ -170,13 +200,17 @@ fn make_scroll_name() -> String {
 }
 
 // This system updates the score for each entity with the "Player" and "Score" component.
-fn count_goblins(human_query: Query<&Human>, goblin_query: Query<&Goblin>) {
+fn count_goblins(human_query: Query<&Human>, goblin_query: Query<&Goblin>, log: Res<Vec<String>>) {
     let num_goblins = goblin_query.iter().len();
     let num_humans = human_query.iter().len();
 
     info!("Goblins remaining: {} ", num_goblins);
     info!("Humans remaining: {} ", num_humans);
     // info!("Scroll name: {} ", make_scroll_name());
+
+    for text in log.iter() {
+        info!("{}", text);
+    }
 }
 
 fn place_creatures(
@@ -218,11 +252,12 @@ fn render_map(map: Res<Vec<TileType>>) {
 
 fn move_path(
     mut commands: Commands,
-    mut creature_query: Query<(Entity, &mut Position, &mut Path, &mut ReadyForPath)>,
+    mut creature_query: Query<(Entity, &Name, &mut Position, &mut Path, &mut Target)>,
     rooms: Res<Vec<Rect>>,
     map: Res<map::Map>,
+    mut log: ResMut<Vec<String>>,
 ) {
-    for (entity, mut position, mut path, mut readyForPath) in creature_query.iter_mut() {
+    for (entity, name, mut position, mut path, mut target) in creature_query.iter_mut() {
         let idx = path.1;
         if path.0.len() > idx {
             let (next_x, next_y) = path.0[idx];
@@ -230,91 +265,73 @@ fn move_path(
             position.1 = next_y;
             path.1 += 1; // Move to next path index
         } else {
-            readyForPath.0 = true;
+            if let Some(target) = &target.0 {
+                commands.entity(target.1).despawn();
+            }
+
+            target.0 = None;
+
+            log.push(format!("{} eats some food", name.0));
         }
     }
 }
 
 fn create_paths(
     mut commands: Commands,
-    mut creature_query: Query<(Entity, &Position, &mut ReadyForPath)>,
+    mut creature_query: Query<(Entity, &Position, &mut Target)>,
+    food_query: Query<(Entity, &Food, &Position)>,
     rooms: Res<Vec<Rect>>,
     map: Res<map::Map>,
 ) {
-
-
     let mut stdout = stdout();
     let mut rng = rand::thread_rng();
 
-    for (entity, position, mut readyForPath) in creature_query.iter_mut() {
+    for (entity, position, mut target) in creature_query.iter_mut() {
+        if target.0.is_none() {
+            // let room_option = rooms.choose(&mut rng).unwrap();
 
-        if readyForPath.0 == false {
-            continue;
-        }
+            // let GOAL: (i32, i32) = room_option.center();
 
-        let room_option = rooms.choose(&mut rng).unwrap();
+            let random_food = food_query.iter().choose(&mut rng);
 
-        let GOAL: (i32, i32) = room_option.center();
+            if let Some((food_ent, _food, food_pos)) = random_food {
+                // let new_x = position.0 + rng.gen_range(-1..=1);
+                // let new_y = position.1 + rng.gen_range(-1..=1);
 
-        let new_x = position.0 + rng.gen_range(-1..=1);
-        let new_y = position.1 + rng.gen_range(-1..=1);
+                // let mut fff: Vec<Position> = Vec::with_capacity(4);
 
-        match is_blocked(new_x, new_y, &map) {
-            false => {
-                // position.0 = new_x;
-                // position.1 = new_y;
+                let result = astar(
+                    &(position.0, position.1),
+                    |&(x, y)| {
+                        vec![(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+                            .into_iter()
+                            .filter(|&(x, y)| map::is_blocked(x, y, &map) == false)
+                            .map(|p| (p, 1))
+                    },
+                    |&(x, y)| absdiff(x, food_pos.0) + absdiff(y, food_pos.1),
+                    |&p| p.0 == food_pos.0 && p.1 == food_pos.1,
+                );
+                // assert_eq!(result.expect("no path found").1, 4);
+
+                if let Some(fff) = result {
+                    let (ttt, yyy) = fff;
+
+                    commands.entity(entity).insert(Path(ttt, 0));
+
+                    target.0 = Some((food_pos.clone(), food_ent));
+                }
             }
-            true => (),
         }
-
-        let mut fff: Vec<Position> = Vec::with_capacity(4);
-
-        let result = astar(
-            &(position.0, position.1),
-            |&(x, y)| {
-                vec![(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
-                    .into_iter()
-                    .filter(|&(x, y)| map::is_blocked(x, y, &map) == false)
-                    .map(|p| (p, 1))
-            },
-            |&(x, y)| absdiff(x, GOAL.0) + absdiff(y, GOAL.1),
-            |&p| p == GOAL,
-        );
-        // assert_eq!(result.expect("no path found").1, 4);
-
-        if let Some(fff) = result {
-            let (ttt, yyy) = fff;
-
-            commands.entity(entity).insert(Path(ttt, 0));
-
-            readyForPath.0 = false;
-
-            // for i in ttt.iter() {
-            //     stdout
-            //         .queue(cursor::MoveTo(
-            //             i.0.try_into().unwrap(),
-            //             i.1.try_into().unwrap(),
-            //         ))
-            //         .unwrap()
-            //         // .queue(style::PrintStyledContent("█".blue()));
-            //         .queue(style::SetForegroundColor(Color::DarkYellow))
-            //         .unwrap()
-            //         .queue(style::Print("P".to_string()))
-            //         .unwrap();
-            // }
-        }
-
-        stdout.queue(style::ResetColor).unwrap().flush();
     }
 }
 
 // This system updates the score for each entity with the "Player" and "Score" component.
-fn draw_creatures(position_query: Query<(&Position, &Colour)>) {
+fn draw_creatures(position_query: Query<(&Position, &Render)>) {
     let mut stdout = stdout();
 
     println!("HEYYYY!!!");
 
-    for (position, colour) in position_query.iter() {
+    for (position, render) in position_query.iter() {
         // execute!(
         //     stdout(),
         //     // Blue foreground
@@ -334,9 +351,9 @@ fn draw_creatures(position_query: Query<(&Position, &Colour)>) {
             ))
             .unwrap()
             // .queue(style::PrintStyledContent("█".blue()));
-            .queue(style::SetForegroundColor(colour.0))
+            .queue(style::SetForegroundColor(render.colour))
             .unwrap()
-            .queue(style::Print("@".to_string()))
+            .queue(style::Print(render.char.to_string()))
             .unwrap();
     }
 
@@ -346,10 +363,11 @@ fn draw_creatures(position_query: Query<(&Position, &Colour)>) {
 // Our Bevy app's entry point
 fn main() {
     let (rooms, map) = new_map_rooms_and_corridors();
-
+    let log: Vec<String> = Vec::new();
     // Bevy apps are created using the builder pattern. We use the builder to add systems,
     // resources, and plugins to our app
     App::build()
+        .insert_resource(log)
         .insert_resource(map)
         .insert_resource(rooms)
         // Resources can be added to our app like this
@@ -436,6 +454,7 @@ fn main() {
         // This call to run() starts the app we just built!
         .add_startup_system(spawn_humans.system().label("spawn"))
         .add_startup_system(spawn_goblins.system().label("spawn"))
+        .add_startup_system(spawn_food.system().label("spawn"))
         .add_system(place_creatures.system())
         .add_system(humans_fight_goblins.system())
         .add_system(render_map.system().label("render_map"))
