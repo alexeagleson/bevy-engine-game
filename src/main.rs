@@ -14,6 +14,11 @@ use bevy::{
     },
 };
 
+mod system_draw_map;
+
+mod components;
+use components::Position;
+
 mod map;
 use crossterm::{
     cursor, execute,
@@ -21,6 +26,9 @@ use crossterm::{
     QueueableCommand, Result,
 };
 pub use map::*;
+
+mod render;
+use render::{render_entities_system, Render};
 
 mod rect;
 use rand::{
@@ -30,13 +38,10 @@ use rand::{
 pub use rect::Rect;
 
 use pathfinding::prelude::{absdiff, astar};
+use rltk::BaseMap;
+use system_draw_map::{draw_full_map, draw_map_changes};
 
 struct Name(String);
-
-struct Render {
-    colour: Color,
-    char: String,
-}
 
 struct Human;
 
@@ -49,11 +54,6 @@ trait Death {
 }
 
 struct Path(Vec<(i32, i32)>, usize);
-
-// struct ReadyForPath(bool);
-
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-struct Position(i32, i32);
 
 struct Target(Option<(Position, Entity)>);
 
@@ -74,8 +74,60 @@ struct CreatureBundle {
     name: Name,
     hp: Hp,
     damage: Damage,
-    render: Render,
+    render: render::Render,
     hunger: Hunger,
+}
+
+pub struct Viewshed {
+    pub visible_tiles: Vec<rltk::Point>,
+    pub range: i32,
+    pub dirty: bool,
+}
+
+use rltk::{field_of_view, Point};
+
+fn draw_fov(
+    // mut commands: Commands,
+    viewshed_query: Query<&Viewshed>,
+    // mut goblin_query: Query<(Entity, &mut Hp, &Goblin)>,
+    map: Res<map::Map>,
+) {
+    let mut stdout = stdout();
+    stdout
+        .queue(style::SetForegroundColor(style::Color::Magenta))
+        .unwrap();
+
+    for viewshed in viewshed_query.iter() {
+        for point in viewshed.visible_tiles.iter() {
+            let tile = map.tiles[map.xy_idx(point.x, point.y)];
+
+            stdout
+                .queue(cursor::MoveTo(
+                    point.x.try_into().unwrap(),
+                    point.y.try_into().unwrap(),
+                ))
+                .unwrap()
+                .queue(style::Print(tile_to_char(&tile)))
+                .unwrap();
+        }
+    }
+}
+
+fn calculate_viewshed(
+    // mut commands: Commands,
+    mut viewshed_query: Query<(&mut Viewshed, &Position)>,
+    // mut goblin_query: Query<(Entity, &mut Hp, &Goblin)>,
+    map: Res<map::Map>,
+) {
+    for (mut viewshed, position) in viewshed_query.iter_mut() {
+        // viewshed.dirty = false;
+        viewshed.visible_tiles.clear();
+        viewshed.visible_tiles =
+            field_of_view(Point::new(position.0, position.1), viewshed.range, &*map);
+        viewshed
+            .visible_tiles
+            .retain(|p| p.x >= 0 && p.x < map.width && p.y >= 0 && p.y < map.height);
+    }
 }
 
 // This system uses a command buffer to (potentially) add a new player to our game on each
@@ -97,7 +149,12 @@ fn spawn_humans(mut commands: Commands) {
                 hunger: Hunger(0),
             })
             .insert(Human)
-            .insert(Target(None));
+            .insert(Target(None))
+            .insert(Viewshed {
+                visible_tiles: Vec::new(),
+                range: 3,
+                dirty: true,
+            });
         // .insert(ReadyForPath(true));
     }
 }
@@ -216,12 +273,12 @@ fn count_goblins(human_query: Query<&Human>, goblin_query: Query<&Goblin>, log: 
 fn place_creatures(
     mut commands: Commands,
     creature_query: Query<Entity, Without<Position>>,
-    rooms: Res<Vec<Rect>>,
+    map: Res<map::Map>,
 ) {
     let mut rng = rand::thread_rng();
 
     for entity in creature_query.iter() {
-        let room_option = rooms.choose(&mut rng);
+        let room_option = map.rooms.choose(&mut rng);
         if let Some(room) = room_option {
             let room_centre = room.center();
 
@@ -230,12 +287,6 @@ fn place_creatures(
                 .insert(Position(room_centre.0, room_centre.1));
         }
     }
-}
-
-// This system updates the score for each entity with the "Player" and "Score" component.
-fn render_map(map: Res<Vec<TileType>>) {
-    print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
-    draw_map(&map);
 }
 
 // execute!(
@@ -253,25 +304,25 @@ fn render_map(map: Res<Vec<TileType>>) {
 fn move_path(
     mut commands: Commands,
     mut creature_query: Query<(Entity, &Name, &mut Position, &mut Path, &mut Target)>,
-    rooms: Res<Vec<Rect>>,
     map: Res<map::Map>,
     mut log: ResMut<Vec<String>>,
+    mut changed_positions: ResMut<Vec<Position>>,
 ) {
     for (entity, name, mut position, mut path, mut target) in creature_query.iter_mut() {
         let idx = path.1;
         if path.0.len() > idx {
             let (next_x, next_y) = path.0[idx];
+            changed_positions.push(position.clone());
             position.0 = next_x;
             position.1 = next_y;
             path.1 += 1; // Move to next path index
         } else {
             if let Some(target) = &target.0 {
                 commands.entity(target.1).despawn();
+                // log.push(format!("{} eats some food", name.0));
             }
 
             target.0 = None;
-
-            log.push(format!("{} eats some food", name.0));
         }
     }
 }
@@ -280,7 +331,6 @@ fn create_paths(
     mut commands: Commands,
     mut creature_query: Query<(Entity, &Position, &mut Target)>,
     food_query: Query<(Entity, &Food, &Position)>,
-    rooms: Res<Vec<Rect>>,
     map: Res<map::Map>,
 ) {
     let mut stdout = stdout();
@@ -305,7 +355,7 @@ fn create_paths(
                     |&(x, y)| {
                         vec![(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
                             .into_iter()
-                            .filter(|&(x, y)| map::is_blocked(x, y, &map) == false)
+                            .filter(|&(x, y)| map.is_opaque(map.xy_idx(x, y)) == false)
                             .map(|p| (p, 1))
                     },
                     |&(x, y)| absdiff(x, food_pos.0) + absdiff(y, food_pos.1),
@@ -325,55 +375,28 @@ fn create_paths(
     }
 }
 
-// This system updates the score for each entity with the "Player" and "Score" component.
-fn draw_creatures(position_query: Query<(&Position, &Render)>) {
+fn flush_stdout() {
     let mut stdout = stdout();
-
-    println!("HEYYYY!!!");
-
-    for (position, render) in position_query.iter() {
-        // execute!(
-        //     stdout(),
-        //     // Blue foreground
-        //     SetForegroundColor(Color::Blue),
-        //     // Red background
-        //     SetBackgroundColor(Color::Red),
-        //     // Print text
-        //     Print("Blue text on Red.".to_string()),
-        //     // Reset to default colors
-        //     ResetColor
-        // );
-
-        stdout
-            .queue(cursor::MoveTo(
-                position.0.try_into().unwrap(),
-                position.1.try_into().unwrap(),
-            ))
-            .unwrap()
-            // .queue(style::PrintStyledContent("█".blue()));
-            .queue(style::SetForegroundColor(render.colour))
-            .unwrap()
-            .queue(style::Print(render.char.to_string()))
-            .unwrap();
-    }
-
     stdout.queue(style::ResetColor).unwrap().flush();
 }
 
 // Our Bevy app's entry point
 fn main() {
-    let (rooms, map) = new_map_rooms_and_corridors();
+    // let (rooms, map) = new_map_rooms_and_corridors();
+    let map: Map = Map::new_map_rooms_and_corridors();
     let log: Vec<String> = Vec::new();
+    let changed_map_positions: Vec<Position> = Vec::new();
     // Bevy apps are created using the builder pattern. We use the builder to add systems,
     // resources, and plugins to our app
     App::build()
         .insert_resource(log)
         .insert_resource(map)
-        .insert_resource(rooms)
+        // .insert_resource(rooms)
+        .insert_resource(changed_map_positions)
         // Resources can be added to our app like this
         // .insert_resource(State { counter: 0 })
         // Some systems are configured by adding their settings as a resource
-        .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_millis(200)))
+        .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_millis(300)))
         // Plugins are just a grouped set of app builder calls (just like we're doing here).
         // We could easily turn our game into a plugin, but you can check out the plugin example for
         // that :) The plugin below runs our app's "system schedule" once every 5 seconds
@@ -455,22 +478,56 @@ fn main() {
         .add_startup_system(spawn_humans.system().label("spawn"))
         .add_startup_system(spawn_goblins.system().label("spawn"))
         .add_startup_system(spawn_food.system().label("spawn"))
+        .add_startup_system(draw_full_map.system())
         .add_system(place_creatures.system())
+        .add_system(
+            draw_map_changes
+                .system()
+                .label("draw_map_changes")
+                .after("move_creatures"),
+        )
         .add_system(humans_fight_goblins.system())
-        .add_system(render_map.system().label("render_map"))
+        // .add_system(render_map.system().label("render_map"))
+        // .add_system(
+        //     count_goblins
+        //         .system()
+        //         .label("count_goblins")
+        //         .after("render_map"),
+        // )
         .add_system(
-            count_goblins
+            render_entities_system
                 .system()
-                .label("count_goblins")
-                .after("render_map"),
+                .label("draw_entities")
+                .after("draw_map_changes")
+                .after("calculate_viewshed"),
+        )
+        .add_system(create_paths.system().label("create paths"))
+        .add_system(
+            move_path
+                .system()
+                .label("move_creatures")
+                .after("create paths"),
         )
         .add_system(
-            draw_creatures
+            flush_stdout
                 .system()
-                .label("draw_creatures")
-                .after("count_goblins"),
+                .label("flush_stdout")
+                .after("draw_entities")
+                .after("calculate_viewshed"),
         )
-        .add_system(create_paths.system())
-        .add_system(move_path.system())
+        .add_system(
+            calculate_viewshed
+                .system()
+                .label("calculate_viewshed")
+                .after("move_creatures"),
+        )
+        .add_system(
+            draw_fov
+                .system()
+                .after("calculate_viewshed")
+                .after("draw_map_changes")
+                .before("draw_entities")
+                .before("flush_stdout"),
+        )
         .run();
 }
