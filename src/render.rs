@@ -6,7 +6,7 @@ use std::{
 use bevy::prelude::{Changed, Query};
 use crossterm::{cursor, style, QueueableCommand};
 
-use super::Position;
+use crate::position::Position;
 
 pub struct Render {
     pub colour: style::Color,
@@ -14,7 +14,7 @@ pub struct Render {
 }
 
 // This system updates the score for each entity with the "Player" and "Score" component.
-pub fn render_entities_system(query: Query<(&Position, &Render), Changed<Position>>) {
+pub fn render_entities_system(query: Query<(&Position, &Render)>) {
     let mut stdout = stdout();
 
     for (position, render) in query.iter() {

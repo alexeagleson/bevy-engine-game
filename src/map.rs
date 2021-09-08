@@ -1,6 +1,14 @@
-use super::rect::Rect;
+use crate::position::Position;
+use crate::rect::Rect;
+
 use rltk::{Algorithm2D, BaseMap, Point, RandomNumberGenerator, Rltk, RGB};
 use std::cmp::{max, min};
+
+use std::convert::TryInto;
+use std::io::{stdout, Write};
+
+use bevy::prelude::{Res, ResMut};
+use crossterm::{cursor, style, QueueableCommand};
 
 #[derive(PartialEq, Copy, Clone)]
 pub enum TileType {
@@ -53,18 +61,20 @@ impl Map {
     /// Makes a new map using the algorithm from http://rogueliketutorials.com/tutorials/tcod/part-3/
     /// This gives a handful of random rooms and corridors joining them together.
     pub fn new_map_rooms_and_corridors() -> Map {
-        let mut map = Map {
-            tiles: vec![TileType::Wall; 80 * 50],
-            rooms: Vec::new(),
-            width: 80,
-            height: 50,
-            // revealed_tiles : vec![false; 80*50],
-            // visible_tiles : vec![false; 80*50]
-        };
-
+        const WIDTH: i32 = 100;
+        const HEIGHT: i32 = 40;
         const MAX_ROOMS: i32 = 30;
         const MIN_SIZE: i32 = 6;
         const MAX_SIZE: i32 = 10;
+
+        let mut map = Map {
+            tiles: vec![TileType::Wall; (WIDTH * HEIGHT) as usize],
+            rooms: Vec::new(),
+            width: WIDTH,
+            height: HEIGHT,
+            // revealed_tiles : vec![false; 80*50],
+            // visible_tiles : vec![false; 80*50]
+        };
 
         let mut rng = RandomNumberGenerator::new();
 
@@ -138,25 +148,30 @@ pub fn draw_map(map: &Map) {
     }
 }
 
-// pub struct Position {
-//     pub x: i32,
-//     pub y: i32,
-// }
+pub fn draw_full_map(map: Res<Map>) {
+    print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
+    draw_map(&map);
+}
 
-// pub struct Viewshed {
-//     pub visible_tiles: Vec<rltk::Point>,
-//     pub range: i32,
-//     pub dirty: bool,
-// }
+pub fn draw_map_changes(map: Res<Map>, mut changed_positions: ResMut<Vec<Position>>) {
+    let mut stdout = stdout();
 
-// use super::Map;
-// use rltk::{field_of_view, Point};
+    stdout
+        .queue(style::SetForegroundColor(style::Color::White))
+        .unwrap();
 
-// if viewshed.dirty {
-//     viewshed.dirty = false;
-//     viewshed.visible_tiles.clear();
-//     viewshed.visible_tiles =
-//         field_of_view(Point::new(pos.x, pos.y), viewshed.range, &*map);
-//     viewshed
-//         .visible_tiles
-//         .retain(|p| p.x >= 0 && p.x < map.width && p.y >= 0 && p.y < map.height);
+    for position in changed_positions.iter() {
+        let tile = map.tiles[map.xy_idx(position.0, position.1)];
+
+        stdout
+            .queue(cursor::MoveTo(
+                position.0.try_into().unwrap(),
+                position.1.try_into().unwrap(),
+            ))
+            .unwrap()
+            .queue(style::Print(tile_to_char(&tile)))
+            .unwrap();
+    }
+
+    changed_positions.clear();
+}
