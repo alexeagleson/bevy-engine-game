@@ -5,7 +5,9 @@ use crate::{
     combat::*,
     components::*,
     fov::Viewshed,
+    goal::Goal,
     hunger::{Food, Hunger},
+    path::Moves,
     render::Render,
 };
 
@@ -16,20 +18,24 @@ struct CreatureBundle {
     damage: Damage,
     render: Render,
     hunger: Hunger,
+    moves: Moves,
+    goal: Goal,
 }
 
 pub fn spawn_humans(mut commands: Commands) {
-    for _ in 1..=5 {
+    for i in 1..=5 {
         commands
             .spawn_bundle(CreatureBundle {
-                name: Name(String::from("Human")),
+                name: Name(String::from(format!("Human{}", i))),
                 damage: Damage(5),
                 hp: Hp(20),
                 render: Render {
                     colour: Color::Green,
-                    char: "@".to_string(),
+                    char: i.to_string(),
                 },
                 hunger: Hunger(0),
+                moves: Moves,
+                goal: Goal::Wander,
             })
             .insert(Human)
             .insert(Viewshed {
@@ -52,6 +58,8 @@ pub fn spawn_goblins(mut commands: Commands) {
                     char: "G".to_string(),
                 },
                 hunger: Hunger(100),
+                moves: Moves,
+                goal: Goal::Wander,
             })
             .insert(Goblin);
     }

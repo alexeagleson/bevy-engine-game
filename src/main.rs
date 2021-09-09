@@ -2,7 +2,9 @@ mod cleanup;
 mod combat;
 mod components;
 mod fov;
+mod goal;
 mod hunger;
+mod log;
 mod map;
 mod path;
 mod position;
@@ -24,35 +26,44 @@ use bevy::{
 
 use cleanup::despawn;
 use combat::{death, fight_nearby_goblins};
-use crossterm::{style::ResetColor, QueueableCommand};
+use crossterm::{cursor, style::ResetColor, QueueableCommand};
 
-use fov::{calculate_viewshed, clear_viewshed, draw_viewshed};
+use fov::{calculate_viewshed, draw_viewshed};
 use hunger::eat_nearby_food;
-use map::{draw_full_map, draw_map_changes, Map};
+use map::{draw_map, Map};
 
 use path::{create_path, move_path};
-use position::{assign_positions, Position};
-use render::render_entities_system;
+use position::assign_positions;
+use render::draw_entities;
 
 use spawner::{spawn_food, spawn_goblins, spawn_humans};
 
+use log::draw_log;
+
+use crate::goal::set_goal;
+
 fn flush_stdout() {
     let mut stdout = stdout();
-    stdout.queue(ResetColor).unwrap().flush();
+    stdout
+        .queue(cursor::MoveTo(0, 0))
+        .unwrap()
+        .queue(ResetColor)
+        .unwrap()
+        .flush();
 }
 
 // Our Bevy app's entry point
 fn main() {
+    print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
+
     let map: Map = Map::new_map_rooms_and_corridors();
     let log: Vec<String> = Vec::new();
-    let changed_map_positions: Vec<Position> = Vec::new();
 
     // Bevy apps are created using the builder pattern. We use the builder to add systems,
     // resources, and plugins to our app
     App::build()
         .insert_resource(log)
         .insert_resource(map)
-        .insert_resource(changed_map_positions)
         // Some systems are configured by adding their settings as a resource
         .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_millis(400)))
         .insert_resource(ReportExecutionOrderAmbiguities)
@@ -137,54 +148,43 @@ fn main() {
         .add_startup_system(spawn_humans.system())
         .add_startup_system(spawn_goblins.system())
         .add_startup_system(spawn_food.system())
-        .add_startup_system(draw_full_map.system())
         // initialize
         .add_system(assign_positions.system().label("initialize"))
         .add_system(create_path.system().label("initialize"))
-        // before_move
+        // take_actions
         .add_system(
             eat_nearby_food
                 .system()
-                .label("before_move")
+                .label("take_actions")
                 .after("initialize"),
         )
         .add_system(
             fight_nearby_goblins
                 .system()
-                .label("before_move")
+                .label("take_actions")
                 .after("initialize"),
         )
         // move
-        .add_system(move_path.system().label("move").after("before_move"))
-        // draw_map_changes
-        .add_system(
-            draw_map_changes
-                .system()
-                .label("draw_map_changes")
-                .after("move"),
-        )
-        .add_system(
-            clear_viewshed
-                .system()
-                .label("clear_viewshed")
-                .after("draw_map_changes"),
-        )
+        .add_system(move_path.system().label("move").after("take_actions"))
         .add_system(
             calculate_viewshed
                 .system()
                 .label("calculate_viewshed")
-                .after("clear_viewshed"),
+                .after("move"),
         )
+        // draw map
+        .add_system(draw_map.system().label("draw_map").after("move"))
         // draw_viewshed
         .add_system(
             draw_viewshed
                 .system()
                 .label("draw_viewshed")
-                .after("calculate_viewshed"),
+                .after("calculate_viewshed")
+                .after("draw_map"),
         )
         // draw_entities
         .add_system(
-            render_entities_system
+            draw_entities
                 .system()
                 .label("draw_entities")
                 .after("draw_viewshed"),
@@ -202,12 +202,19 @@ fn main() {
                 .label("cleanup_entities")
                 .after("draw_entities"),
         )
+        .add_system(
+            draw_log
+                .system()
+                .label("draw_log")
+                .after("cleanup_entities"),
+        )
         // flush_stdout
         .add_system(
             flush_stdout
                 .system()
                 .label("flush_stdout")
-                .after("draw_entities"),
+                .after("draw_log"),
         )
+        .add_system(set_goal.system().after("flush_stdout"))
         .run();
 }

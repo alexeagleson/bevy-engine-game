@@ -1,9 +1,6 @@
-use std::{
-    convert::TryInto,
-    io::{stdout, Write},
-};
+use std::{convert::TryInto, io::stdout};
 
-use bevy::prelude::{Changed, Query};
+use bevy::prelude::Query;
 use crossterm::{cursor, style, QueueableCommand};
 
 use crate::position::Position;
@@ -14,7 +11,7 @@ pub struct Render {
 }
 
 // This system updates the score for each entity with the "Player" and "Score" component.
-pub fn render_entities_system(query: Query<(&Position, &Render)>) {
+pub fn draw_entities(query: Query<(&Position, &Render)>) {
     let mut stdout = stdout();
 
     for (position, render) in query.iter() {
