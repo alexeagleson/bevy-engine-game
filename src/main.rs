@@ -1,8 +1,8 @@
 mod cleanup;
 mod combat;
 mod components;
+mod destination;
 mod fov;
-mod goal;
 mod hunger;
 mod log;
 mod map;
@@ -11,8 +11,6 @@ mod position;
 mod rect;
 mod render;
 mod spawner;
-mod destination;
-mod memory;
 
 use std::{
     io::{stdout, Write},
@@ -34,7 +32,7 @@ use fov::{calculate_viewshed, draw_viewshed};
 use hunger::eat_nearby_food;
 use map::{draw_map, Map};
 
-use path::{create_path, move_path};
+use path::{move_path, path_to_destination};
 use position::assign_positions;
 use render::draw_entities;
 
@@ -42,7 +40,7 @@ use spawner::{spawn_food, spawn_goblins, spawn_humans};
 
 use log::draw_log;
 
-use crate::goal::set_goal;
+use crate::destination::set_destination;
 
 fn flush_stdout() {
     let mut stdout = stdout();
@@ -152,7 +150,7 @@ fn main() {
         .add_startup_system(spawn_food.system())
         // initialize
         .add_system(assign_positions.system().label("initialize"))
-        .add_system(create_path.system().label("initialize"))
+        .add_system(path_to_destination.system().label("initialize"))
         // take_actions
         .add_system(
             eat_nearby_food
@@ -217,6 +215,6 @@ fn main() {
                 .label("flush_stdout")
                 .after("draw_log"),
         )
-        .add_system(set_goal.system().after("flush_stdout"))
+        .add_system(set_destination.system().after("flush_stdout"))
         .run();
 }

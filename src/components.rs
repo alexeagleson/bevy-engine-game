@@ -16,8 +16,3 @@ pub enum Severity {
 pub trait HasSeverity {
     fn get_severity(&self) -> Severity;
 }
-
-pub struct Destination { 
-    pub position: Position,
-    pub wandering: bool,
-}

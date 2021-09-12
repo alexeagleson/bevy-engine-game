@@ -1,4 +1,3 @@
-
 use std::cmp::{max, min};
 
 use bevy::prelude::{Commands, Entity, Query, Res, Without};

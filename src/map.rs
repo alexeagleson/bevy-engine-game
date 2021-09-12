@@ -94,8 +94,14 @@ impl Map {
                 map.apply_room_to_map(&new_room);
 
                 if !map.rooms.is_empty() {
-                    let (new_x, new_y) = new_room.center();
-                    let (prev_x, prev_y) = map.rooms[map.rooms.len() - 1].center();
+                    let new_center = new_room.center();
+                    let new_x = new_center.0;
+                    let new_y = new_center.1;
+
+                    let prev_center =  map.rooms[map.rooms.len() - 1].center();
+                    let prev_x = prev_center.0;
+                    let prev_y = prev_center.1;
+                    
                     if rng.range(0, 2) == 1 {
                         map.apply_horizontal_tunnel(prev_x, new_x, prev_y);
                         map.apply_vertical_tunnel(prev_y, new_y, new_x);

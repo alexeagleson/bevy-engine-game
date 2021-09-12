@@ -1,15 +1,16 @@
-use bevy::prelude::{Commands, Entity, Query, Res, With, Without};
+use bevy::prelude::{Commands, Entity, Query, Res, ResMut, With, Without};
 use pathfinding::prelude::{absdiff, astar};
 use rand::prelude::SliceRandom;
 use rltk::BaseMap;
 
-use crate::{combat::Dead, components::Destination, map::Map, position::Position};
+use crate::{combat::Dead, components::Name, destination::{Destination, Wandering}, map::Map, position::Position};
 
 pub struct Moves;
 
 pub struct Path {
     pub current: Vec<(i32, i32)>,
     pub index: usize,
+    pub destination: Position,
 }
 
 fn generate_path(
@@ -33,20 +34,28 @@ fn generate_path(
 
 pub fn path_to_destination(
     mut commands: Commands,
-    query: Query<(Entity, &Position, &Destination), (With<Moves>, Without<Path>)>,
+    query: Query<(Entity, &Name, &Position, &Destination, Option<&Path>), (With<Moves>, Without<Path>)>,
     map: Res<Map>,
+    mut log: ResMut<Vec<String>>,
 ) {
-    let mut rng = rand::thread_rng();
 
-    for (entity, position, destination) in query.iter() {
-        if destination.wandering == true {
-            let room = map.rooms.choose(&mut rng).unwrap();
-            let room_centre = room.center();
-
-            let result = generate_path(&map, &position, &room_centre);
+    for (entity, name, position, destination, path) in query.iter() {
+        if path.is_none()
+            || (path.is_some()
+                && path.unwrap().destination.0 != destination.0 .0
+                && path.unwrap().destination.1 != destination.0 .1)
+        {
+            let result = generate_path(&map, &position, &destination.0);
 
             if let Some(result) = result {
-                commands.entity(entity).insert(Path { current: result.0, index: 0 } );
+                let last_position = result.0.last().unwrap();
+                let destination = Position(last_position.0, last_position.1);
+                commands.entity(entity).insert(Path {
+                    current: result.0,
+                    index: 0,
+                    destination,
+                });
+                log.push(format!("{} is now moving to their destination", name.0));
             }
         }
     }
@@ -57,14 +66,13 @@ pub fn move_path(
     mut creature_query: Query<(Entity, &mut Position, &mut Path), (With<Moves>, Without<Dead>)>,
 ) {
     for (entity, mut position, mut path) in creature_query.iter_mut() {
-        let idx = path.1;
-        if path.0.len() > idx {
-            let (next_x, next_y) = path.0[idx];
+        if path.current.len() > path.index {
+            let (next_x, next_y) = path.current[path.index];
             position.0 = next_x;
             position.1 = next_y;
-            path.1 += 1; // Move to next path index
+            path.index += 1;
         } else {
-            commands.entity(entity).remove::<Path>();
+            commands.entity(entity).remove::<Path>().insert(Wandering);
         }
     }
 }

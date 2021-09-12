@@ -1,15 +1,7 @@
 use bevy::prelude::{Bundle, Commands};
 use crossterm::style::Color;
 
-use crate::{
-    combat::*,
-    components::*,
-    fov::Viewshed,
-    // goal::Goal,
-    hunger::{Food, Hunger},
-    path::Moves,
-    render::Render,
-};
+use crate::{combat::*, components::*, destination::Wandering, fov::Viewshed, hunger::{Food, Hunger}, path::Moves, render::Render};
 
 #[derive(Bundle)]
 struct CreatureBundle {
@@ -44,7 +36,8 @@ pub fn spawn_humans(mut commands: Commands) {
                 visible_tiles: Vec::new(),
                 range: 4,
                 dirty: true,
-            });
+            })
+            .insert(Wandering);
     }
 }
 
