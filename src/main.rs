@@ -11,6 +11,8 @@ mod position;
 mod rect;
 mod render;
 mod spawner;
+mod destination;
+mod memory;
 
 use std::{
     io::{stdout, Write},

@@ -1,4 +1,7 @@
-use crate::{components::Name, position::{distance2d_pythagoras_squared, Position}};
+use crate::{
+    components::{HasSeverity, Name, Severity},
+    position::{distance2d_pythagoras_squared, Position},
+};
 use bevy::prelude::{Changed, Query, ResMut};
 
 pub struct Food {
@@ -7,24 +10,21 @@ pub struct Food {
 
 pub struct Hunger(pub i32);
 
-pub trait Severity {
-    fn is_critical(&self) -> bool;
-    fn is_dead(&self) -> bool;
-}
-
 impl Hunger {
     fn eat(&mut self, food: &mut Food) {
-        self.0 = 100;
+        self.0 = 0;
         food.eaten = true;
     }
 }
 
-impl Severity for Hunger {
-    fn is_critical(&self) -> bool {
-        self.0 < 100
-    }
-    fn is_dead(&self) -> bool {
-        self.0 <= 0
+impl HasSeverity for Hunger {
+    fn get_severity(&self) -> Severity {
+        if self.0 >= 100 {
+            return Severity::Max;
+        } else if self.0 > 0 {
+            return Severity::Moderate;
+        }
+        Severity::Min
     }
 }
 
@@ -36,15 +36,18 @@ pub fn eat_nearby_food(
     mut log: ResMut<Vec<String>>,
 ) {
     for (hunger_name, hunger_position, mut hunger) in hunger_query.iter_mut() {
-        if hunger.is_critical() {
-            for (mut food, food_position) in food_query.iter_mut() {
-                if distance2d_pythagoras_squared(hunger_position, food_position) <= 1.0 {
-                    if food.eaten == false {
-                        hunger.eat(&mut food);
-                        log.push(format!("{} eats food", hunger_name.0));
+        match hunger.get_severity() {
+            Severity::Moderate | Severity::Max => {
+                for (mut food, food_position) in food_query.iter_mut() {
+                    if distance2d_pythagoras_squared(hunger_position, food_position) <= 1.0 {
+                        if food.eaten == false {
+                            hunger.eat(&mut food);
+                            log.push(format!("{} eats food", hunger_name.0));
+                        }
                     }
                 }
             }
+            Severity::Min => (),
         }
     }
 }

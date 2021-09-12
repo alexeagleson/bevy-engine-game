@@ -4,7 +4,7 @@ use crate::{
     combat::Damage,
     components::{Goblin, Human},
     fov::Viewshed,
-    hunger::{Food, Hunger, Severity},
+    hunger::{Food, Hunger},
     map::Map,
     position::Position,
     components::Name
@@ -51,11 +51,11 @@ pub fn set_goal(
                     if tile.x == target_position.0 && tile.y == target_position.1 {
                         if let Some(subject_hunger) = subject_hunger {
                             if let Some(target_food) = target_food {
-                                if subject_hunger.is_critical() {
-                                    log.push(format!("{} is hungry and sees food", subject_name.0));
-                                    *subject_goal = Goal::Eat;
-                                    log.push(format!("{}'s goal is {:?}", subject_name.0, subject_goal));
-                                }
+                                // if subject_hunger.is_critical() {
+                                //     log.push(format!("{} is hungry and sees food", subject_name.0));
+                                //     *subject_goal = Goal::Eat;
+                                //     log.push(format!("{}'s goal is {:?}", subject_name.0, subject_goal));
+                                // }
                             }
                         }
                     }

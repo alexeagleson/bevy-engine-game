@@ -57,25 +57,4 @@ pub fn calculate_viewshed(
 }
 
 
-// pub fn look_around(
-//     // mut commands: Commands,
-//     query: Query<(Viewshed, Option<&Hp>, Option<&Damage>)>,
-//     mut log: ResMut<Vec<String>>,
-// ) {
-//     for (entity, hp, damage) in query.iter() {
-//         // let hp = query.get_component::<Hp>(entity);
 
-//         if let Some(hp) = hp {
-//             log.push(format!("Hp: {}", hp.0))
-//         }
-
-//         if let Some(damage) = damage {
-//             log.push(format!("damage: {}", damage.0))
-//         }
-
-//         // match hp {
-//         //     Ok(_) => log.push("ok".to_string()),
-//         //     Err(e) => log.push(format!("{:?}", e)),
-//         // }
-//     }
-// }
