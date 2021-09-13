@@ -73,7 +73,7 @@ fn main() {
         .insert_resource(log)
         .insert_resource(map)
         // Some systems are configured by adding their settings as a resource
-        .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_millis(50)))
+        .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_millis(25)))
         .insert_resource(ReportExecutionOrderAmbiguities)
         // Plugins are just a grouped set of app builder calls (just like we're doing here).
         // We could easily turn our game into a plugin, but you can check out the plugin example for
@@ -202,7 +202,7 @@ fn main() {
             draw_log
                 .system()
                 .label("draw_log")
-                .after("cleanup_entities"),
+                .after("creature_type_count"),
         )
         // flush_stdout
         .add_system(
@@ -211,7 +211,12 @@ fn main() {
                 .label("flush_stdout")
                 .after("draw_log"),
         )
-        .add_system(creature_type_count.system().label("creature_type_count").after("flush_stdout"))
-        .add_system(end_game.system().after("creature_type_count"))
+        .add_system(
+            creature_type_count
+                .system()
+                .label("creature_type_count")
+                .after("cleanup_entities"),
+        )
+        .add_system(end_game.system().after("flush_stdout").label("end_game"))
         .run();
 }
