@@ -1,18 +1,13 @@
-use crate::position::Position;
 
 pub struct Name(pub String);
 
-pub struct Human;
-
-pub struct Goblin;
-
 #[derive(PartialEq)]
-pub enum Severity {
+pub enum SeverityLevel {
     Max,
     Moderate,
     Min,
 }
 
-pub trait HasSeverity {
-    fn get_severity(&self) -> Severity;
+pub trait Severity {
+    fn get_severity(&self) -> SeverityLevel;
 }

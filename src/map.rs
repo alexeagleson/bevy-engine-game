@@ -1,14 +1,12 @@
-use crate::position::Position;
 use crate::rect::Rect;
 
-use rltk::{Algorithm2D, BaseMap, Point, RandomNumberGenerator, Rltk, RGB};
+use rltk::{Algorithm2D, BaseMap, Point, RandomNumberGenerator};
 use std::cmp::{max, min};
 
-use std::convert::TryInto;
-use std::io::{stdout, Write};
+use std::io::stdout;
 
-use bevy::prelude::{Res, ResMut};
-use crossterm::{cursor, style, QueueableCommand};
+use bevy::prelude::Res;
+use crossterm::{cursor, QueueableCommand};
 
 #[derive(PartialEq, Copy, Clone)]
 pub enum TileType {
@@ -98,10 +96,10 @@ impl Map {
                     let new_x = new_center.0;
                     let new_y = new_center.1;
 
-                    let prev_center =  map.rooms[map.rooms.len() - 1].center();
+                    let prev_center = map.rooms[map.rooms.len() - 1].center();
                     let prev_x = prev_center.0;
                     let prev_y = prev_center.1;
-                    
+
                     if rng.range(0, 2) == 1 {
                         map.apply_horizontal_tunnel(prev_x, new_x, prev_y);
                         map.apply_vertical_tunnel(prev_y, new_y, new_x);

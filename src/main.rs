@@ -3,7 +3,6 @@ mod combat;
 mod components;
 mod destination;
 mod fov;
-mod hunger;
 mod log;
 mod map;
 mod path;
@@ -14,7 +13,7 @@ mod spawner;
 
 use std::{
     io::{stdout, Write},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use bevy::{
@@ -24,23 +23,28 @@ use bevy::{
     prelude::{App, IntoSystem, ParallelSystemDescriptorCoercion},
 };
 
-use cleanup::despawn;
-use combat::{death, fight_nearby_goblins};
+use combat::{death, fight};
 use crossterm::{cursor, style::ResetColor, QueueableCommand};
 
 use fov::{calculate_viewshed, draw_viewshed};
-use hunger::eat_nearby_food;
 use map::{draw_map, Map};
 
 use path::{move_path, path_to_destination};
 use position::assign_positions;
 use render::draw_entities;
 
-use spawner::{spawn_food, spawn_goblins, spawn_humans};
-
 use log::draw_log;
 
-use crate::destination::set_destination;
+use crate::{
+    cleanup::{creature_type_count, end_game},
+    destination::set_destination,
+    spawner::spawn_all,
+};
+
+#[derive(Default)]
+pub struct TickCount(pub i32);
+
+pub struct EndGameEvent;
 
 fn flush_stdout() {
     let mut stdout = stdout();
@@ -49,7 +53,8 @@ fn flush_stdout() {
         .unwrap()
         .queue(ResetColor)
         .unwrap()
-        .flush();
+        .flush()
+        .unwrap();
 }
 
 // Our Bevy app's entry point
@@ -62,10 +67,13 @@ fn main() {
     // Bevy apps are created using the builder pattern. We use the builder to add systems,
     // resources, and plugins to our app
     App::build()
+        .add_event::<EndGameEvent>()
+        .insert_resource(Instant::now())
+        .insert_resource(TickCount(0))
         .insert_resource(log)
         .insert_resource(map)
         // Some systems are configured by adding their settings as a resource
-        .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_millis(400)))
+        .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_millis(50)))
         .insert_resource(ReportExecutionOrderAmbiguities)
         // Plugins are just a grouped set of app builder calls (just like we're doing here).
         // We could easily turn our game into a plugin, but you can check out the plugin example for
@@ -145,27 +153,21 @@ fn main() {
         // to make that judgement yourself.
         // This call to run() starts the app we just built!
         // Startup systems
-        .add_startup_system(spawn_humans.system())
-        .add_startup_system(spawn_goblins.system())
-        .add_startup_system(spawn_food.system())
+        .add_startup_system(spawn_all.system())
+        // .add_startup_system(spawn_goblins.system())
+        // .add_startup_system(spawn_food.system())
         // initialize
         .add_system(assign_positions.system().label("initialize"))
         .add_system(path_to_destination.system().label("initialize"))
-        // take_actions
+        .add_system(fight.system().label("fight").after("initialize"))
         .add_system(
-            eat_nearby_food
+            set_destination
                 .system()
-                .label("take_actions")
-                .after("initialize"),
-        )
-        .add_system(
-            fight_nearby_goblins
-                .system()
-                .label("take_actions")
-                .after("initialize"),
+                .label("set_destination")
+                .after("fight"),
         )
         // move
-        .add_system(move_path.system().label("move").after("take_actions"))
+        .add_system(move_path.system().label("move").after("set_destination"))
         .add_system(
             calculate_viewshed
                 .system()
@@ -197,12 +199,6 @@ fn main() {
                 .after("draw_entities"),
         )
         .add_system(
-            despawn
-                .system()
-                .label("cleanup_entities")
-                .after("draw_entities"),
-        )
-        .add_system(
             draw_log
                 .system()
                 .label("draw_log")
@@ -215,6 +211,7 @@ fn main() {
                 .label("flush_stdout")
                 .after("draw_log"),
         )
-        .add_system(set_destination.system().after("flush_stdout"))
+        .add_system(creature_type_count.system().label("creature_type_count").after("flush_stdout"))
+        .add_system(end_game.system().after("creature_type_count"))
         .run();
 }

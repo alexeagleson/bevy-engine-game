@@ -1,12 +1,10 @@
 use std::{convert::TryInto, io::stdout};
 
-use bevy::prelude::{Changed, Commands, Entity, Or, Query, Res, With};
+use bevy::prelude::{Changed, Query, Res};
 use crossterm::{cursor, style, QueueableCommand};
 use rltk::{field_of_view, Point};
 
 use crate::{
-    components::Goblin,
-    hunger::Food,
     map::{tile_to_char, Map},
     position::Position,
 };
@@ -14,7 +12,6 @@ use crate::{
 pub struct Viewshed {
     pub visible_tiles: Vec<rltk::Point>,
     pub range: i32,
-    pub dirty: bool,
 }
 
 pub fn draw_viewshed(viewshed_query: Query<&Viewshed>, map: Res<Map>) {
@@ -40,13 +37,10 @@ pub fn draw_viewshed(viewshed_query: Query<&Viewshed>, map: Res<Map>) {
 }
 
 pub fn calculate_viewshed(
-    // mut commands: Commands,
     mut viewshed_query: Query<(&mut Viewshed, &Position), Changed<Position>>,
-    // mut goblin_query: Query<(Entity, &mut Hp, &Goblin)>,
     map: Res<Map>,
 ) {
     for (mut viewshed, position) in viewshed_query.iter_mut() {
-        // viewshed.dirty = false;
         viewshed.visible_tiles.clear();
         viewshed.visible_tiles =
             field_of_view(Point::new(position.0, position.1), viewshed.range, &*map);
@@ -55,6 +49,3 @@ pub fn calculate_viewshed(
             .retain(|p| p.x >= 0 && p.x < map.width && p.y >= 0 && p.y < map.height);
     }
 }
-
-
-

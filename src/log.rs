@@ -16,16 +16,20 @@ pub fn draw_log(map: Res<Map>, log: Res<Vec<String>>) {
         .queue(style::SetForegroundColor(Color::White))
         .unwrap();
 
-    for (idx, log_entry) in log.iter().rev().enumerate() {
+    'log_loop: for (idx, log_entry) in log.iter().rev().enumerate() {
         stdout
             .queue(cursor::MoveTo(
                 (map.width + 1).try_into().unwrap(),
-                (idx + 5).try_into().unwrap(),
+                (idx + 2).try_into().unwrap(),
             ))
             .unwrap()
             .queue(style::Print(log_entry))
             .unwrap()
-            .queue(style::Print("                                  "))
+            .queue(style::Print("                                          "))
             .unwrap();
+
+            if idx >= (map.height - 3).try_into().unwrap() {
+                break 'log_loop;
+            }
     }
 }

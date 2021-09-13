@@ -1,7 +1,7 @@
 use bevy::prelude::{Bundle, Commands};
 use crossterm::style::Color;
 
-use crate::{combat::*, components::*, destination::Wandering, fov::Viewshed, hunger::{Food, Hunger}, path::Moves, render::Render};
+use crate::{combat::*, components::*, fov::Viewshed, path::Moves, render::Render};
 
 #[derive(Bundle)]
 struct CreatureBundle {
@@ -9,66 +9,77 @@ struct CreatureBundle {
     hp: Hp,
     damage: Damage,
     render: Render,
-    hunger: Hunger,
     moves: Moves,
-    // goal: Goal,
     aggression: Aggression,
+    creature_type: CreatureType,
+    viewshed: Viewshed,
 }
 
-pub fn spawn_humans(mut commands: Commands) {
+fn spawn_humans(commands: &mut Commands) {
     for i in 1..=5 {
-        commands
-            .spawn_bundle(CreatureBundle {
-                name: Name(String::from(format!("Human{}", i))),
-                damage: Damage(5),
-                hp: Hp(20),
-                render: Render {
-                    colour: Color::Green,
-                    char: i.to_string(),
-                },
-                hunger: Hunger(100),
-                moves: Moves,
-                // goal: Goal::Wander,
-                aggression: Aggression(100),
-            })
-            .insert(Human)
-            .insert(Viewshed {
+        commands.spawn_bundle(CreatureBundle {
+            name: Name(String::from(format!("Human{}", i))),
+            damage: Damage(5),
+            hp: Hp(20),
+            render: Render {
+                colour: Color::Green,
+                char: i.to_string(),
+            },
+            moves: Moves,
+            aggression: Aggression(100),
+            viewshed: Viewshed {
                 visible_tiles: Vec::new(),
                 range: 4,
-                dirty: true,
-            })
-            .insert(Wandering);
+            },
+            creature_type: CreatureType::Human,
+        });
     }
 }
 
-pub fn spawn_goblins(mut commands: Commands) {
-    for _ in 1..=5 {
-        commands
-            .spawn_bundle(CreatureBundle {
-                name: Name(String::from("Goblin")),
-                damage: Damage(0),
-                hp: Hp(15),
-                render: Render {
-                    colour: Color::Red,
-                    char: "G".to_string(),
-                },
-                hunger: Hunger(0),
-                moves: Moves,
-                // goal: Goal::Wander,
-                aggression: Aggression(0),
-            })
-            .insert(Goblin);
+fn spawn_goblins(commands: &mut Commands) {
+    for i in 1..=20 {
+        commands.spawn_bundle(CreatureBundle {
+            name: Name(String::from(format!("Goblin{}", i))),
+            damage: Damage(1),
+            hp: Hp(15),
+            render: Render {
+                colour: Color::Red,
+                char: "G".to_string(),
+            },
+            moves: Moves,
+            aggression: Aggression(100),
+            viewshed: Viewshed {
+                visible_tiles: Vec::new(),
+                range: 4,
+            },
+            creature_type: CreatureType::Goblin,
+        });
     }
 }
 
-pub fn spawn_food(mut commands: Commands) {
-    for _ in 1..=10 {
-        commands
-            .spawn()
-            .insert(Render {
-                colour: Color::Yellow,
-                char: "F".to_string(),
-            })
-            .insert(Food { eaten: false });
+fn spawn_orcs(commands: &mut Commands) {
+    for i in 1..=4 {
+        commands.spawn_bundle(CreatureBundle {
+            name: Name(String::from(format!("Orc{}", i))),
+            damage: Damage(10),
+            hp: Hp(15),
+            render: Render {
+                colour: Color::Cyan,
+                char: "O".to_string(),
+            },
+            moves: Moves,
+            aggression: Aggression(100),
+            viewshed: Viewshed {
+                visible_tiles: Vec::new(),
+                range: 4,
+            },
+            creature_type: CreatureType::Orc,
+        });
     }
+}
+
+pub fn spawn_all(mut commands: Commands) {
+    spawn_humans(&mut commands);
+    spawn_goblins(&mut commands);
+    spawn_orcs(&mut commands);
 }

@@ -1,9 +1,10 @@
-use bevy::prelude::{Commands, Entity, Query, Res, ResMut, With, Without};
+use bevy::prelude::{Changed, Commands, Entity, Query, Res, ResMut, With, Without};
 use pathfinding::prelude::{absdiff, astar};
-use rand::prelude::SliceRandom;
 use rltk::BaseMap;
 
-use crate::{combat::Dead, components::Name, destination::{Destination, Wandering}, map::Map, position::Position};
+use crate::{
+    combat::Dead, components::Name, destination::Destination, map::Map, position::Position,
+};
 
 pub struct Moves;
 
@@ -34,29 +35,22 @@ fn generate_path(
 
 pub fn path_to_destination(
     mut commands: Commands,
-    query: Query<(Entity, &Name, &Position, &Destination, Option<&Path>), (With<Moves>, Without<Path>)>,
+    query: Query<(Entity, &Name, &Position, &Destination), (With<Moves>, Changed<Destination>)>,
     map: Res<Map>,
     mut log: ResMut<Vec<String>>,
 ) {
+    for (entity, name, position, destination) in query.iter() {
+        let result = generate_path(&map, &position, &destination.position);
 
-    for (entity, name, position, destination, path) in query.iter() {
-        if path.is_none()
-            || (path.is_some()
-                && path.unwrap().destination.0 != destination.0 .0
-                && path.unwrap().destination.1 != destination.0 .1)
-        {
-            let result = generate_path(&map, &position, &destination.0);
-
-            if let Some(result) = result {
-                let last_position = result.0.last().unwrap();
-                let destination = Position(last_position.0, last_position.1);
-                commands.entity(entity).insert(Path {
-                    current: result.0,
-                    index: 0,
-                    destination,
-                });
-                log.push(format!("{} is now moving to their destination", name.0));
-            }
+        if let Some(result) = result {
+            let last_position = result.0.last().unwrap();
+            let destination = Position(last_position.0, last_position.1);
+            commands.entity(entity).insert(Path {
+                current: result.0,
+                index: 0,
+                destination,
+            });
+            log.push(format!("{} is now moving to their new destination", name.0));
         }
     }
 }
@@ -72,7 +66,10 @@ pub fn move_path(
             position.1 = next_y;
             path.index += 1;
         } else {
-            commands.entity(entity).remove::<Path>().insert(Wandering);
+            commands
+                .entity(entity)
+                .remove::<Path>()
+                .remove::<Destination>();
         }
     }
 }
