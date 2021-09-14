@@ -10,6 +10,7 @@ mod position;
 mod rect;
 mod render;
 mod spawner;
+mod equipment;
 
 use std::{
     io::{stdout, Write},

@@ -13,6 +13,7 @@ struct CreatureBundle {
     creature_type: CreatureType,
     viewshed: Viewshed,
     combat_stats: CombatStats,
+    equips: Equips,
 }
 
 #[derive(Bundle)]
@@ -40,6 +41,7 @@ fn spawn_humans(commands: &mut Commands) {
                 },
                 creature_type: CreatureType::Human,
                 combat_stats: CombatStats::default(),
+                equips: Equips,
             })
             .insert(EquippedWeapon(&SWORD));
     }
@@ -63,6 +65,7 @@ fn spawn_goblins(commands: &mut Commands) {
                 },
                 creature_type: CreatureType::Goblin,
                 combat_stats: CombatStats::default(),
+                equips: Equips,
             })
             .insert(EquippedWeapon(&NUNCHUCKS));
     }
@@ -85,6 +88,7 @@ fn spawn_orcs(commands: &mut Commands) {
             },
             creature_type: CreatureType::Orc,
             combat_stats: CombatStats::default(),
+            equips: Equips,
         });
     }
 }

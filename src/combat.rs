@@ -38,6 +38,8 @@ pub struct Weapon {
     die_num: i32,
 }
 
+pub struct Equips;
+
 pub struct EquippedWeapon(pub &'static Weapon);
 
 pub struct Dead;
@@ -99,6 +101,14 @@ fn calculate_damage(weapon: &Weapon) -> i32 {
     damage
 }
 
+pub fn get_weapon(optional_equipped: Option<&EquippedWeapon>) -> &Weapon {
+    if let Some(equipped) = optional_equipped {
+        equipped.0
+    } else {
+        &UNARMED
+    }
+}
+
 pub fn fight(
     subject_query: Query<(
         &Name,
@@ -144,12 +154,7 @@ pub fn fight(
                         let roll = rng.gen_range(1..=20);
                         match roll + subject_combat_stats.attack_bonus {
                             _roll if _roll >= target_combat_stats.armour_class => {
-                                let weapon = if let Some(equipped_weapon) = subject_equipped_weapon
-                                {
-                                    equipped_weapon.0
-                                } else {
-                                    &UNARMED
-                                };
+                                let weapon = get_weapon(subject_equipped_weapon);
 
                                 let damage = calculate_damage(weapon);
 
