@@ -6,7 +6,7 @@ use std::cmp::{max, min};
 use std::io::stdout;
 
 use bevy::prelude::Res;
-use crossterm::{cursor, QueueableCommand};
+use crossterm::{QueueableCommand, cursor, style};
 
 #[derive(PartialEq, Copy, Clone)]
 pub enum TileType {
@@ -139,7 +139,11 @@ pub fn tile_to_char(tile: &TileType) -> &str {
 pub fn draw_map(map: Res<Map>) {
     let mut stdout = stdout();
 
-    stdout.queue(cursor::MoveTo(0, 0)).unwrap();
+    stdout
+        .queue(cursor::MoveTo(0, 0))
+        .unwrap()
+        .queue(style::SetForegroundColor(style::Color::DarkGrey))
+        .unwrap();
 
     // let mut y = 0;
     let mut x = 0;

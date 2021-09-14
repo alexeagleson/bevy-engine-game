@@ -1,3 +1,5 @@
+use rand::Rng;
+
 use crate::position::Position;
 
 pub struct Rect {
@@ -24,5 +26,14 @@ impl Rect {
 
     pub fn center(&self) -> Position {
         Position((self.x1 + self.x2) / 2, (self.y1 + self.y2) / 2)
+    }
+
+    pub fn random(&self) -> Position {
+        let mut rng = rand::thread_rng();
+
+        Position(
+            rng.gen_range(self.x1+1..=self.x2),
+            rng.gen_range(self.y1+1..=self.y2),
+        )
     }
 }

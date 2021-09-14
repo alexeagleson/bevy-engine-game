@@ -17,7 +17,7 @@ pub struct Viewshed {
 pub fn draw_viewshed(viewshed_query: Query<&Viewshed>, map: Res<Map>) {
     let mut stdout = stdout();
     stdout
-        .queue(style::SetForegroundColor(style::Color::Magenta))
+        .queue(style::SetForegroundColor(style::Color::Yellow))
         .unwrap();
 
     for viewshed in viewshed_query.iter() {

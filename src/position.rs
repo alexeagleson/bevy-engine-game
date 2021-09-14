@@ -25,7 +25,7 @@ pub fn assign_positions(
     for entity in creature_query.iter() {
         let room_option = map.rooms.choose(&mut rng);
         if let Some(room) = room_option {
-            let room_centre = room.center();
+            let room_centre = room.random();
 
             commands
                 .entity(entity)
