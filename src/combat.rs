@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use bevy::prelude::{Commands, Entity, Query, ResMut, Without};
 use rand::Rng;
 
@@ -33,14 +35,21 @@ impl Death for Hp {
     }
 }
 
-pub struct Weapon {
+pub struct WeaponStats {
     die_size: i32,
     die_num: i32,
 }
 
 pub struct Equips;
 
-pub struct EquippedWeapon(pub &'static Weapon);
+#[derive(Clone)]
+pub enum Weapon {
+    Unarmed,
+    Sword,
+    Nunchucks,
+}
+
+pub struct EquippedWeapon(pub Weapon);
 
 pub struct Dead;
 
@@ -65,47 +74,58 @@ impl Default for CombatStats {
     }
 }
 
-pub static UNARMED: Weapon = Weapon {
+pub const UNARMED_STATS: WeaponStats = WeaponStats {
     die_num: 1,
     die_size: 3,
 };
 
-pub static SWORD: Weapon = Weapon {
+pub const SWORD_STATS: WeaponStats = WeaponStats {
     die_num: 2,
     die_size: 6,
 };
 
-pub static NUNCHUCKS: Weapon = Weapon {
+pub const NUNCHUCKS_STATS: WeaponStats = WeaponStats {
     die_num: 5,
-    die_size: 8,
+    die_size: 12,
 };
+
+pub fn get_stats_from_weapon(weapon: &Weapon) -> &'static WeaponStats {
+    match weapon {
+        Weapon::Unarmed => &UNARMED_STATS,
+        Weapon::Sword => &SWORD_STATS,
+        Weapon::Nunchucks => &NUNCHUCKS_STATS,
+    }
+}
 
 pub trait Power {
     fn get_power(&self) -> i32;
+    fn get_damage(&self) -> i32;
 }
 
 impl Power for Weapon {
     fn get_power(&self) -> i32 {
-        self.die_num * self.die_size
-    }
-}
-
-fn calculate_damage(weapon: &Weapon) -> i32 {
-    let mut rng = rand::thread_rng();
-    let mut damage = 0;
-
-    for _ in 0..weapon.die_num {
-        damage += rng.gen_range(1..=weapon.die_size);
+        let stats = get_stats_from_weapon(&self);
+        stats.die_num * stats.die_size
     }
 
-    damage
+    fn get_damage(&self) -> i32 {
+        let mut rng = rand::thread_rng();
+        let stats = get_stats_from_weapon(&self);
+        let mut damage = 0;
+
+        for _ in 0..stats.die_num {
+            damage += rng.gen_range(1..=stats.die_size);
+        }
+
+        damage
+    }
 }
 
 pub fn get_weapon(optional_equipped: Option<&EquippedWeapon>) -> &Weapon {
     if let Some(equipped) = optional_equipped {
-        equipped.0
+        &equipped.0
     } else {
-        &UNARMED
+        &Weapon::Unarmed
     }
 }
 
@@ -154,9 +174,10 @@ pub fn fight(
                         let roll = rng.gen_range(1..=20);
                         match roll + subject_combat_stats.attack_bonus {
                             _roll if _roll >= target_combat_stats.armour_class => {
+                                // let weapon_type = get_weapon(subject_equipped_weapon);
                                 let weapon = get_weapon(subject_equipped_weapon);
-
-                                let damage = calculate_damage(weapon);
+                                let damage = weapon.get_damage();
+                                let weapon_stats = get_stats_from_weapon(&weapon);
 
                                 target_hp.0 = target_hp.0 - damage;
                                 log.push(format!(
@@ -167,8 +188,8 @@ pub fn fight(
                                 roll,
                                 subject_combat_stats.attack_bonus,
                                 target_combat_stats.armour_class,
-                                &weapon.die_num,
-                                weapon.die_size
+                                &weapon_stats.die_num,
+                                weapon_stats.die_size
                             ));
                             }
                             _ => {

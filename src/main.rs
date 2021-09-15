@@ -36,11 +36,7 @@ use render::draw_entities;
 
 use log::draw_log;
 
-use crate::{
-    cleanup::{creature_type_count, end_game},
-    destination::set_destination,
-    spawner::spawn_all,
-};
+use crate::{cleanup::{creature_type_count, end_game}, destination::set_destination, equipment::pick_up_gear, spawner::spawn_all};
 
 #[derive(Default)]
 pub struct TickCount(pub i32);
@@ -74,7 +70,7 @@ fn main() {
         .insert_resource(log)
         .insert_resource(map)
         // Some systems are configured by adding their settings as a resource
-        .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_millis(250)))
+        .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_millis(500)))
         .insert_resource(ReportExecutionOrderAmbiguities)
         // Plugins are just a grouped set of app builder calls (just like we're doing here).
         // We could easily turn our game into a plugin, but you can check out the plugin example for
@@ -167,6 +163,7 @@ fn main() {
                 .label("set_destination")
                 .after("fight"),
         )
+        .add_system(pick_up_gear.system())
         // move
         .add_system(move_path.system().label("move").after("set_destination"))
         .add_system(

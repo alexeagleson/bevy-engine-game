@@ -20,7 +20,7 @@ struct CreatureBundle {
 struct WeaponBundle {
     name: Name,
     render: Render,
-    weapon: &'static Weapon,
+    weapon: Weapon,
 }
 
 fn spawn_humans(commands: &mut Commands) {
@@ -43,7 +43,7 @@ fn spawn_humans(commands: &mut Commands) {
                 combat_stats: CombatStats::default(),
                 equips: Equips,
             })
-            .insert(EquippedWeapon(&SWORD));
+            .insert(EquippedWeapon(Weapon::Sword));
     }
 }
 
@@ -67,7 +67,7 @@ fn spawn_goblins(commands: &mut Commands) {
                 combat_stats: CombatStats::default(),
                 equips: Equips,
             })
-            .insert(EquippedWeapon(&NUNCHUCKS));
+            .insert(EquippedWeapon(Weapon::Sword));
     }
 }
 
@@ -94,14 +94,14 @@ fn spawn_orcs(commands: &mut Commands) {
 }
 
 fn spawn_weapons(commands: &mut Commands) {
-    for i in 1..=3 {
+    for i in 1..=20 {
         commands.spawn_bundle(WeaponBundle {
             name: Name(String::from(format!("Nunchucks{}", i))),
             render: Render {
                 colour: Color::DarkMagenta,
                 char: "N".to_string(),
             },
-            weapon: &NUNCHUCKS,
+            weapon: Weapon::Nunchucks,
         });
     }
 }
