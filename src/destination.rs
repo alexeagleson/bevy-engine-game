@@ -22,13 +22,13 @@ pub fn set_destination(
     >,
     target_query: Query<(Entity, &Name, &Position, &CreatureType), Without<Dead>>,
     map: Res<Map>,
-    mut log: ResMut<Vec<String>>,
+    // mut log: ResMut<Vec<String>>,
 ) {
     let mut rng = rand::thread_rng();
 
     'subject_loop: for (
         subject_entity,
-        subject_name,
+        _subject_name,
         subject_position,
         subject_creature_type,
         subject_destination,

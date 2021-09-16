@@ -1,13 +1,22 @@
-use bevy::prelude::{Commands, Entity, Query, ResMut, Without};
+use std::{convert::TryInto, io::stdout};
+
+use bevy::prelude::{Commands, Entity, Query, Res, ResMut, With, Without};
+use crossterm::{
+    cursor,
+    style::{self, Color},
+    QueueableCommand,
+};
 use rand::Rng;
 
 use crate::{
     components::{Name, Severity, SeverityLevel},
     creature::CreatureType,
-    equipment::{get_weapon, EquippedWeapon},
+    equipment::{get_weapon, EquippedArmour, EquippedWeapon},
+    map::Map,
     path::Moves,
     position::{distance2d_pythagoras_squared, Position},
     render::Render,
+    spawner::Tracked,
 };
 
 pub struct Aggression(pub i32);
@@ -138,5 +147,43 @@ pub fn death(
 
             log.push(format!("{} dies!", name.0));
         }
+    }
+}
+
+pub fn track_creature(
+    map: Res<Map>,
+    query: Query<
+        (
+            &Name,
+            &CreatureType,
+            Option<&EquippedWeapon>,
+            Option<&EquippedArmour>,
+        ),
+        With<Tracked>,
+    >,
+) {
+    if let Ok((name, creature_type, equipped_weapon, equipped_armour)) = query.single() {
+        let equipped_weapon_name = match equipped_weapon {
+            Some(weapon) => weapon.0.get_name(),
+            None => "-".to_string(),
+        };
+
+        let equipped_armour_name = match equipped_armour {
+            Some(armour) => armour.0.get_name(),
+            None => "-".to_string(),
+        };
+
+        let mut stdout = stdout();
+
+        stdout
+            .queue(style::SetForegroundColor(Color::White))
+            .unwrap()
+            .queue(cursor::MoveTo(0, (map.height + 1).try_into().unwrap()))
+            .unwrap()
+            .queue(style::Print(format!(
+                "\nName: {}                            \nType: {:?}                                        \nWeapon: {}                               \nArmour: {}                                     ",
+                name.0, creature_type, equipped_weapon_name, equipped_armour_name
+            )))
+            .unwrap();
     }
 }
