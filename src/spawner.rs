@@ -1,7 +1,7 @@
 use bevy::prelude::{Bundle, Commands};
 use crossterm::style::Color;
 
-use crate::{combat::*, components::*, fov::Viewshed, path::Moves, render::Render};
+use crate::{combat::*, components::*, creature::CreatureType, equipment::{EquippedWeapon, Equips, Weapon}, fov::Viewshed, path::Moves, render::Render};
 
 #[derive(Bundle)]
 struct CreatureBundle {
@@ -12,19 +12,11 @@ struct CreatureBundle {
     aggression: Aggression,
     creature_type: CreatureType,
     viewshed: Viewshed,
-    combat_stats: CombatStats,
     equips: Equips,
 }
 
-#[derive(Bundle)]
-struct WeaponBundle {
-    name: Name,
-    render: Render,
-    weapon: Weapon,
-}
-
 fn spawn_humans(commands: &mut Commands) {
-    for i in 1..=5 {
+    for i in 1..=2 {
         commands
             .spawn_bundle(CreatureBundle {
                 name: Name(String::from(format!("Human{}", i))),
@@ -40,7 +32,6 @@ fn spawn_humans(commands: &mut Commands) {
                     range: 4,
                 },
                 creature_type: CreatureType::Human,
-                combat_stats: CombatStats::default(),
                 equips: Equips,
             })
             .insert(EquippedWeapon(Weapon::Sword));
@@ -48,7 +39,7 @@ fn spawn_humans(commands: &mut Commands) {
 }
 
 fn spawn_goblins(commands: &mut Commands) {
-    for i in 1..=5 {
+    for i in 1..=2 {
         commands
             .spawn_bundle(CreatureBundle {
                 name: Name(String::from(format!("Goblin{}", i))),
@@ -64,7 +55,6 @@ fn spawn_goblins(commands: &mut Commands) {
                     range: 4,
                 },
                 creature_type: CreatureType::Goblin,
-                combat_stats: CombatStats::default(),
                 equips: Equips,
             })
             .insert(EquippedWeapon(Weapon::Sword));
@@ -72,7 +62,7 @@ fn spawn_goblins(commands: &mut Commands) {
 }
 
 fn spawn_orcs(commands: &mut Commands) {
-    for i in 1..=5 {
+    for i in 1..=2 {
         commands.spawn_bundle(CreatureBundle {
             name: Name(String::from(format!("Orc{}", i))),
             hp: Hp(15),
@@ -87,22 +77,15 @@ fn spawn_orcs(commands: &mut Commands) {
                 range: 4,
             },
             creature_type: CreatureType::Orc,
-            combat_stats: CombatStats::default(),
             equips: Equips,
         });
     }
 }
 
 fn spawn_weapons(commands: &mut Commands) {
-    for i in 1..=20 {
-        commands.spawn_bundle(WeaponBundle {
-            name: Name(String::from(format!("Nunchucks{}", i))),
-            render: Render {
-                colour: Color::DarkMagenta,
-                char: "N".to_string(),
-            },
-            weapon: Weapon::Nunchucks,
-        });
+    for _ in 1..=2 {
+        commands.spawn_bundle(Weapon::Nunchucks.get_bundle());
+        commands.spawn_bundle(Weapon::Superchucks.get_bundle());
     }
 }
 

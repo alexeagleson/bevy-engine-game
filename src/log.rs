@@ -25,7 +25,7 @@ pub fn draw_log(map: Res<Map>, log: Res<Vec<String>>) {
             // .unwrap()
             // .queue(style::Print(log_entry))
             .unwrap()
-            .queue(style::Print(format!("{: <1$}", log_entry, 146 - log_entry.len())))
+            .queue(style::Print(format!("{: <1$}", log_entry, 220 - log_entry.len())))
             .unwrap();
 
             if idx >= (map.height - 3).try_into().unwrap() {

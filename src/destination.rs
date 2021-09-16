@@ -1,14 +1,7 @@
 use bevy::prelude::*;
 use rand::prelude::SliceRandom;
 
-use crate::{
-    combat::{CreatureType, Dead},
-    components::Name,
-    fov::Viewshed,
-    map::Map,
-    path::{Moves, Path},
-    position::{distance2d_pythagoras_squared, Position},
-};
+use crate::{combat::{ Dead}, components::Name, creature::CreatureType, fov::Viewshed, map::Map, path::{Moves, Path}, position::{distance2d_pythagoras_squared, Position}};
 
 pub struct Destination {
     pub position: Position,
@@ -96,7 +89,8 @@ pub fn set_destination(
                     })
                     .remove::<Path>();
 
-                log.push(format!("{} has a new destination", subject_name.0));
+                // [EXTRA DEBUG]
+                // log.push(format!("{} has a new destination", subject_name.0));
             }
         }
         if subject_destination.is_none() {
@@ -106,7 +100,8 @@ pub fn set_destination(
                 position: Position(room_centre.0, room_centre.1),
             });
 
-            log.push(format!("{}'s destination is a random room", subject_name.0));
+            // [DEBUG]
+            // log.push(format!("{}'s destination is a random room", subject_name.0));
         }
     }
 }

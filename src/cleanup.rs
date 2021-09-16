@@ -5,10 +5,7 @@ use bevy::{
     prelude::{EventReader, EventWriter, Query, Res, ResMut, Without},
 };
 
-use crate::{
-    combat::{CreatureType, Dead},
-    EndGameEvent,
-};
+use crate::{EndGameEvent, combat::Dead, creature::CreatureType};
 
 pub fn creature_type_count(
     query: Query<&CreatureType, Without<Dead>>,
@@ -22,13 +19,21 @@ pub fn creature_type_count(
             acc
         });
 
-    if creature_set.len() == 1 {
-        log.push(format!(
-            "Game over!  Winner: {:?}s after {} seconds",
-            creature_set.iter().next().unwrap(),
-            game_start_time.elapsed().as_secs()
-        ));
-        end_game_event.send(EndGameEvent);
+    let num_creatures_remaining = creature_set.len();
+    match num_creatures_remaining {
+        0 => {
+            log.push(format!("Game over!  Everybody is dead!  Everybody loses!",));
+            end_game_event.send(EndGameEvent);
+        }
+        1 => {
+            log.push(format!(
+                "Game over!  Winner: {:?}s after {} seconds",
+                creature_set.iter().next().unwrap(),
+                game_start_time.elapsed().as_secs()
+            ));
+            end_game_event.send(EndGameEvent);
+        }
+        _ => (),
     }
 }
 

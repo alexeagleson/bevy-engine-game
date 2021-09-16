@@ -1,5 +1,6 @@
 use bevy::prelude::{Changed, Commands, Entity, Query, Res, ResMut, With, Without};
 use pathfinding::prelude::{absdiff, astar};
+use rand::Rng;
 use rltk::BaseMap;
 
 use crate::{
@@ -39,6 +40,8 @@ pub fn path_to_destination(
     map: Res<Map>,
     mut log: ResMut<Vec<String>>,
 ) {
+    let mut rng = rand::thread_rng();
+
     for (entity, name, position, destination) in query.iter() {
         let result = generate_path(&map, &position, &destination.position);
 
@@ -47,10 +50,12 @@ pub fn path_to_destination(
             let destination = Position(last_position.0, last_position.1);
             commands.entity(entity).insert(Path {
                 current: result.0,
-                index: 0,
+                index: rng.gen_range(0..=1),
                 destination,
             });
-            log.push(format!("{} is now moving to their new destination", name.0));
+
+            // [EXTRA DEBUG]
+            // log.push(format!("{} is now moving to their new destination", name.0)); 
         }
     }
 }
