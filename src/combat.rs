@@ -11,7 +11,9 @@ use rand::Rng;
 use crate::{
     components::{Name, Severity, SeverityLevel},
     creature::CreatureType,
-    equipment::{get_weapon, EquippedArmour, EquippedWeapon},
+    equipment::{
+        get_armour, get_shield, get_weapon, EquippedArmour, EquippedShield, EquippedWeapon,
+    },
     map::Map,
     path::Moves,
     position::{distance2d_pythagoras_squared, Position},
@@ -54,7 +56,17 @@ pub fn fight(
         &CreatureType,
         Option<&EquippedWeapon>,
     )>,
-    mut target_query: Query<(&mut Hp, &Name, &Position, &CreatureType), Without<Dead>>,
+    mut target_query: Query<
+        (
+            &mut Hp,
+            &Name,
+            &Position,
+            &CreatureType,
+            Option<&EquippedArmour>,
+            Option<&EquippedShield>,
+        ),
+        Without<Dead>,
+    >,
     mut log: ResMut<Vec<String>>,
 ) {
     let mut rng = rand::thread_rng();
@@ -67,8 +79,14 @@ pub fn fight(
         subject_equipped_weapon,
     ) in subject_query.iter()
     {
-        for (mut target_hp, target_name, target_position, target_creature_type) in
-            target_query.iter_mut()
+        for (
+            mut target_hp,
+            target_name,
+            target_position,
+            target_creature_type,
+            target_equipped_armour,
+            target_equipped_shield,
+        ) in target_query.iter_mut()
         {
             // Same typed creatures do not attack one another
             if subject_creature_type == target_creature_type {
@@ -79,9 +97,15 @@ pub fn fight(
                 match subject_aggression.get_severity() {
                     SeverityLevel::Moderate | SeverityLevel::Max => {
                         let roll = rng.gen_range(1..=20);
+                        let shield = get_shield(target_equipped_shield);
+                        let armour = get_armour(target_equipped_armour);
+
+                        let total_ac = target_creature_type.get_stats().armour_class
+                            + shield.get_stats().armour_class
+                            + armour.get_stats().armour_class;
+
                         match roll + subject_creature_type.get_stats().attack_bonus {
-                            _roll if _roll >= target_creature_type.get_stats().armour_class => {
-                                // let weapon_type = get_weapon(subject_equipped_weapon);
+                            roll if roll >= total_ac => {
                                 let weapon = get_weapon(subject_equipped_weapon);
                                 let damage = weapon.get_damage();
                                 let weapon_stats = weapon.get_stats();
@@ -97,10 +121,13 @@ pub fn fight(
                                 ));
 
                                 log.push(format!(
-                                    "(Rolled {}+{} (1d20 + AB) against {} AC for {} ({}d{}) damage)",
+                                    "(Rolled {}+{} (1d20 + AB) against {} AC ({}+{}+{}) for {} ({}d{}) damage)",
                                     roll,
                                     subject_creature_type.get_stats().attack_bonus,
+                                    total_ac,
                                     target_creature_type.get_stats().armour_class,
+                                    armour.get_stats().armour_class,
+                                    shield.get_stats().armour_class,
                                     damage,
                                     &weapon_stats.die_num,
                                     weapon_stats.die_size
@@ -113,7 +140,7 @@ pub fn fight(
                                     target_name.0,
                                     roll,
                                     subject_creature_type.get_stats().attack_bonus,
-                                    target_creature_type.get_stats().armour_class,
+                                    total_ac,
                                 ));
                             }
                         }
@@ -156,13 +183,15 @@ pub fn track_creature(
         (
             &Name,
             &CreatureType,
+            &Hp,
             Option<&EquippedWeapon>,
             Option<&EquippedArmour>,
         ),
         With<Tracked>,
     >,
 ) {
-    if let Ok((name, creature_type, equipped_weapon, equipped_armour)) = query.single() {
+    if let Ok((name, creature_type, creature_hp, equipped_weapon, equipped_armour)) = query.single()
+    {
         let equipped_weapon_name = match equipped_weapon {
             Some(weapon) => weapon.0.get_name(),
             None => "-".to_string(),
@@ -181,8 +210,8 @@ pub fn track_creature(
             .queue(cursor::MoveTo(0, (map.height + 1).try_into().unwrap()))
             .unwrap()
             .queue(style::Print(format!(
-                "\nName: {}                            \nType: {:?}                                        \nWeapon: {}                               \nArmour: {}                                     ",
-                name.0, creature_type, equipped_weapon_name, equipped_armour_name
+                "\nName: {}                            \nType: {:?}                                        \nWeapon: {}                               \nArmour: {}                                  \nHp: {}                                            ",
+                name.0, creature_type, equipped_weapon_name, equipped_armour_name, creature_hp.0
             )))
             .unwrap();
     }
